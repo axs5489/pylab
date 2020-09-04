@@ -1,6 +1,5 @@
 from Instruments.instrument import Instrument
 import numpy as np
-import urllib.request
 
 class NetAnalyzer(Instrument):
 	models = ["NA", "E507\dC"]
@@ -102,11 +101,6 @@ class NetAnalyzer(Instrument):
 				float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0]))
 
 
-	def get_trace(self):
-		freqList = [float(i) for i in self.ask(':SENS1:FREQ:DATA?').split(',')]
-		amplList = [float(i) for i in self.ask(':CALC1:DATA:FDAT?').split(',')[::2]]
-		return np.transpose([freqList, amplList])
-
 	def set_marker(self, freq, marker=None):
 		if marker == None:
 			marker = 1
@@ -124,10 +118,11 @@ class NetAnalyzer(Instrument):
 
 		return float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0])
 
+	def get_trace(self):
+		freqList = [float(i) for i in self.ask(':SENS1:FREQ:DATA?').split(',')]
+		amplList = [float(i) for i in self.ask(':CALC1:DATA:FDAT?').split(',')[::2]]
+		return np.transpose([freqList, amplList])
+		
 	def save_trace(self, filename):
 		np.savetxt(filename, self.get_trace(), delimiter='\t')
 		return 0
-
-	def save_screen(self, filename):
-		urllib.request.urlretrieve('http://' + self.host + '/image.asp', filename)
-		urllib.request.urlretrieve('http://' + self.host + '/disp.png', filename)

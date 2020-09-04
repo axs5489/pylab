@@ -3,66 +3,72 @@ from Instruments.validators import strict_range, strict_discrete_set, truncated_
 
 class GSG(Instrument):
 	models = ["GPS", r"GSG-\d\d"]
+	SIGNAL_MODE_LETTER = ["U", "M", "P"]		# Unmodulated / Modulated / PRN signal
+	GNSS_LETTER = {'G' : "GPS",
+					'R': "GLONASS",
+					'E': "GALILEO",
+					'C': "BEIDOU",
+					'J': "QZSS",
+					'I': "IRNSS",
+					'S': "SBAS"}
+	SIGNAL_TYPE = ['GPSL1CA','GPSL1P','GPSL1PY','GPSL2P','GPS L2PY',	# GPS
+				'GLOL1', 'GLOL2',										# GLONASS
+				'GALE1', 'GALE5a', 'GALE5b',							# GALILEO
+				'BDSB1', 'BDSB2',										# BeiDou
+				'QZSSL1CA', 'QZSSL1SAIF', 'QZSSL2C', 'QZSSL5',			# QZSS
+				'IRNSSL5' 												# IRNSS
+				]
+	ENVIRONMENTS = ['URBAN','SUBURBAN','RURAL','OPEN']
+	
 	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
 		super(GSG, self).__init__(name, adapter, enableSCPI, **kwargs)
-		self.amplitude_units = 'Vpp'
-
-	def set_frequency_start_stop(self, start, stop):
-		self.write(':SENS1:FREQ:STAR ' + str(start))
-		self.write(':SENS1:FREQ:STOP ' + str(stop))
-
-	def set_frequency_center_span(self, center, span=None):
-		self.write('SENS1:FREQ:CENT ' + str(center))
-		if not span == None:
-			self.write('SENS1:FREQ:SPAN ' + str(span))
-
-	def set_sweep_parameters(self, number_of_points, power):
-		self.write(':SENS1:SWE:POIN ' + str(number_of_points))
-		self.write(':SOUR1:POW ' + str(power))
+	
+	status = Instrument.control(":SOUR:ONECHN:CONT?;", "SOUR:ONECHN:CONT %s%s%d;", "Sig Gen execution, START / STOP / ARM",
+							strict_discrete_set, ["START", "STOP", "ARM"]
+	)
+	sat_id = Instrument.control(":SOUR:ONECHN:SAT?;", "SOUR:ONECHN:SAT %s;", "Satelite ID",
+	)
+	signal = Instrument.control(":SOUR:ONECHN:SIGNAL?;", "SOUR:ONECHN:SIGNAL %s;", "Signal Type",
+							strict_discrete_set, SIGNAL_TYPE)
+	start = Instrument.control(":SOUR:ONECHN:START?;", "SOUR:ONECHN:START %s;", "Start Time, DD/MM/YYYY hh:mm")
+	ephemeris = Instrument.control(":SOUR:ONECHN:EPH?;", "SOUR:ONECHN:EPH %s;", "Ephemeris, filename")
 	
 	atten = Instrument.control(":OUTP:EXTATT?;", "OUTP:EXTATT %g;", "Attenuation, in dB")
 	ext_ref = Instrument.control(":SOUR:EXTREF?;", "SOUR:EXTREF %s;", "External Reference Clock, ON or OFF",
 							strict_discrete_set, ["ON", "OFF"]
 	)
+	noise_en = Instrument.control(":SOUR:NOISE:CONT?;", "SOUR:NOISE:CONT %s;", "Noise simulation, ON or OFF",
+							strict_discrete_set, ["ON", "OFF"]
+	)
+	noise_density = Instrument.control(":SOUR:NOISE:CNO?;", "SOUR:NOISE:CNO %g", "Carrier/Noise density, [0.0, 56.0]",
+							strict_range, [0, 56]
+	)
 
+
+	freq_offset = Instrument.control(":SOUR:ONECHN:FREQ?;", ":SOUR:ONECHN:FREQ %s;",
+		""" A floating point property that represents the output frequency (Hz).""")
+	freq_offset_range = Instrument.control(":SOUR:ONECHN:FREQ?;", ":SOUR:ONECHN:FREQ %d;",
+		""" A floating point property that represents the output frequency (Hz).""",
+							strict_range, [-6e6, 6e6])
 	power = Instrument.control("SOUR:POW?;", "SOUR:POW %g;",
-		""" A floating point property that represents the amplitude (dBm)."""
-	)
+		""" A floating point property that represents the amplitude (dBm).""")
 	refpower = Instrument.control("SOUR:REFPOW?;", "SOUR:REFPOW %g;",
-		""" A floating point property that represents the reference power (dBm)."""
-	)
-	
-	
+		""" A floating point property that represents the reference power (dBm).""")
 	pps = Instrument.control(":SOUR:PPSOUT?;", "SOUR:PPSOUT %d;", "PPS OUTPUT, ON or OFF",
-							strict_discrete_set, [1, 10, 100, 1000]
-	)
+							strict_discrete_set, [1, 10, 100, 1000])
 	
+	prop_env = Instrument.control(":SOUR:SCEN:PROP?;", "SOUR::SCEN:PROP %s;", "Propagation environment",
+							strict_discrete_set, ENVIRONMENTS)
 	
-	power_offset = Instrument.control(":POW:LEV:IMM:OFFset?;", ":POW:LEV:IMM:OFFset %g DB;",
-		""" A floating point property that represents the amplitude offset (dB). """
+class GSG_55(GSG):
+	models = ["GPS", r"GSG-55"]
+	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
+		super(GSG, self).__init__(name, adapter, enableSCPI, **kwargs)
+		self.amplitude_units = 'Vpp'
+	
+	noise_bw = Instrument.control(":SOUR:NOISE:BW?;", "SOUR:NOISE:BW %g", "[GSG-55 ONLY] Noise bandwith, [0.001, 20.46]",
+							strict_range, [0.001, 20.46]
 	)
-	frequency = Instrument.control(":FREQ?;", ":FREQ %e Hz;",
-		""" A floating point property that represents the output frequency (Hz)."""
-	)
-	start_frequency = Instrument.control(":SOUR:FREQ:STAR?", ":SOUR:FREQ:STAR %e Hz",
-		""" A floating point property that represents the start frequency (Hz)."""
-	)
-	center_frequency = Instrument.control(":SOUR:FREQ:CENT?", ":SOUR:FREQ:CENT %e Hz;",
-		""" A floating point property that represents the center frequency (Hz)."""
-	)
-	stop_frequency = Instrument.control(":SOUR:FREQ:STOP?", ":SOUR:FREQ:STOP %e Hz",
-		""" A floating point property that represents the stop frequency (Hz)."""
-	)
-	start_power = Instrument.control(":SOUR:POW:STAR?", ":SOUR:POW:STAR %e dBm",
-		""" A floating point property that represents the start power (dBm)."""
-	)
-	stop_power = Instrument.control(":SOUR:POW:STOP?", ":SOUR:POW:STOP %e dBm",
-		""" A floating point property that represents the stop power (dBm)."""
-	)
-	dwell_time = Instrument.control(":SOUR:SWE:DWEL1?", ":SOUR:SWE:DWEL1 %.3f",
-		""" A floating point property that represents the settling time (s)
-		at the current frequency or power setting."""
-	)
-	step_points = Instrument.control(":SOUR:SWE:POIN?", ":SOUR:SWE:POIN %d",
-		""" An integer number of points in a step sweep."""
+	noise_offset = Instrument.control(":SOUR:NOISE:OFFSET?;", "SOUR:NOISE:OFFSET %g", "[GSG-55 ONLY] Noise frequency offset, [-10.23, 10.23]",
+							strict_range, [-10.23, 10.23]
 	)

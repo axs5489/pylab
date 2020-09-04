@@ -1,14 +1,14 @@
-from Instruments.instrument import Instrument
+from Instruments.instrument import Channel, Instrument
 from Instruments.validators import strict_discrete_set
 
-class Channel(object):
+class ScopeChannel(Channel):
 	SOURCE_VALUES = ['CH1', 'CH2', 'CH3', 'CH4', 'MATH']
 	COUPLING_VALUES = ['AC', 'DC', 'DCREJ']
 	
 	def __init__(self, parent, num):
 		self.parent = parent
 		self.num = num
-		self.preamble = "MEAS:IMM" + num
+		self.preamble = "MEAS:IMM" + str(num)
 		
 	def bandwidth(self, bw = None):
 		if(bw == None):
@@ -123,10 +123,10 @@ class Oscilloscope(Instrument):
 	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
 		super(Oscilloscope, self).__init__(name, adapter, enableSCPI, **kwargs)
 		self._maxsamplerate = self.query("ACQuire:MAXSamplerate?")
-		self.ch1 = Channel(self, 1)
-		self.ch2 = Channel(self, 2)
-		self.ch3 = Channel(self, 3)
-		self.ch4 = Channel(self, 4)
+		self.ch1 = ScopeChannel(self, 1)
+		self.ch2 = ScopeChannel(self, 2)
+		self.ch3 = ScopeChannel(self, 3)
+		self.ch4 = ScopeChannel(self, 4)
 
 	acq_mode = Instrument.control('ACQ:MOD?"','FUNC "%s"', "FUNCTION",
 							strict_discrete_set, acq_modes)

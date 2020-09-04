@@ -1,54 +1,51 @@
 import re
 import numpy as np
-import urllib.request
+import visa
 
 from Adapters.adapter import FakeAdapter
 from Adapters.visa import VISAAdapter
 
-class Instrument():
+class BaseInstrument():
 	""" Base class for all Instruments, independent of Adapter used to communicate with the instrument.
-		Provides basic SCPI commands by default, but can be toggled with :code:`enableSCPI`.
-		:param name: A string name
+		:param makemodel: A string name
 		:param adapter: An :class:`Adapter<l3hlib.Adapters.adapter>` object
-		:param enableSCPI: A boolean, which toggles the inclusion of standard SCPI commands
 	"""
 	models = []
+	_LEVELS = ["MIN", "MAX"]
+	_MODES = ["LOC", "REM", "LLO"]
+	_ONOFF = ["OFF", "ON"]
 	
-	def __init__(self, makemodel, adapter, enableSCPI=True, **kwargs):
+	def __init__(self, makemodel, adapter, **kwargs):
 		try:
 			if isinstance(adapter, (int, str)):
-				adapter = VISAAdapter(adapter, **kwargs)
+				print(adapter)
+				try:
+					rm = visa.ResourceManager()
+					resource = rm.open_resource(adapter)
+					adapter = VISAAdapter(adapter, resource, **kwargs)
+				except visa.VisaIOError as e:
+					print(resource, ":", "Visa IO Error: check connections")
+					print(e)
+				
 		except ImportError:
 			raise Exception("Invalid Adapter provided for Instrument since PyVISA is not present")
 
 		self._name = makemodel
-		self._SCPI = enableSCPI
 		self._adapter = adapter
 		if(type(makemodel) is list):
 			self._mfg = makemodel[0]
 			self._mdl = makemodel[1]
 			self._sn = makemodel[2]
 		
-		if enableSCPI:
-			# Basic SCPI commands
-			self.status = self.measurement("*STB?", """ Returns the status of the instrument """)
-			self.complete = self.measurement("*OPC?", """ TODO: Add this doc """)
-		
-		#print(self.display())
-		#print(self.selftest())
-		#print(self.version())
-		#print(self.status())
-		#self.beep()
-		#self.recover(True)
 		self._active = True
 		
 	def close(self):
 		self._name = None
-		self._SCPI = None
 		self._adapter = None
-		self._mfg = None
-		self._mdl = None
-		self._sn = None
+		if(type(self._name) is list):
+			self._mfg = None
+			self._mdl = None
+			self._sn = None
 
 	def __del__(self):
 		self.close()
@@ -66,10 +63,10 @@ class Instrument():
 	@property
 	def id(self):
 		""" Requests and returns the identification of the instrument. """
-		if self.SCPI:
-			return self.adapter.ask("*IDN?").strip()
-		else:
-			return "Warning: Property not implemented."
+		try:
+			return self._adapter.ask("*IDN?").strip()
+		except:
+			return "Warning: Identification error."
 
 	# Wrapper functions for the Adapter object
 	def ask(self, command):
@@ -106,25 +103,6 @@ class Instrument():
 	def binary_values(self, command, header_bytes=0, dtype=np.float32):
 		return self._adapter.binary_values(command, header_bytes, dtype)
 
-	def error(self):
-		"""Return any accumulated errors."""
-		return self.ask("SYST:ERR?")
-
-	def check_error(self):
-		"""Prints any accumulated errors and returns True if there are."""
-		e = self.error()
-		print(e)
-		if(e.find("+0") >= 0):
-			return False
-		else:
-			return True
-
-	def recover(self, reset=False):
-		"""Return any accumulated errors."""
-		while(self.check_error()):
-			self.clear()
-		if(reset) : self.reset()
-
 	def beep(self):
 		""" Clears the instrument status byte """
 		self.write("SYST:BEEP")
@@ -145,7 +123,7 @@ class Instrument():
 	def shutdown(self):
 		"""Brings the instrument to a safe and stable state"""
 		self.isShutdown = True
-		print("Shutting down %s" % self.name)
+		print("Shutting down %s" % self._name)
 
 	def selftest(self):
 		"""Trigger self-test"""
@@ -426,16 +404,63 @@ class Instrument():
 		np.savetxt(filename, self.get_trace(), delimiter='\t')
 		return 0
 
-	def save_screen(self, filename):
-		urllib.request.urlretrieve('http://' + self.host + '/image.asp', filename)
-		urllib.request.urlretrieve('http://' + self.host + '/disp.png', filename)
 
+class Channel(BaseInstrument):
+	""" Intermediate class for equipment with multiple channels. """
+
+	def __init__(self, channel, adapter, parent, **kwargs):
+		super(Channel,self).__init__(str(channel), adapter, True, **kwargs)
+		self.chnum = channel
+		self.parent = parent
+	
+	def close(self):
+		self.chnum = None
+		self.parent = None
+		super(Channel,self).close()
+	
+	def getChannel(self):
+		return self.chnum
+
+class Instrument(BaseInstrument):
+	""" Intermediate class for equipment with multiple channels. """
+
+	def __init__(self, channel, parent, adapter, enableSCPI=False, **kwargs):
+		super(Instrument,self).__init__(str(channel), adapter, **kwargs)
+		if enableSCPI:
+			# Basic SCPI commands
+			self.status = self.measurement("*STB?", """ Returns the status of the instrument """)
+			self.complete = self.measurement("*OPC?", """ TODO: Add this doc """)
+		#print(self.display())
+		#print(self.selftest())
+		#print(self.version())
+		#print(self.status())
+		#self.beep()
+		#self.recover(True)
+
+	def error(self):
+		"""Return any accumulated errors."""
+		return self.ask("SYST:ERR?")
+
+	def check_error(self):
+		"""Prints any accumulated errors and returns True if there are."""
+		e = self.error()
+		print(e)
+		if(e.find("+0") >= 0):
+			return False
+		else:
+			return True
+
+	def recover(self, reset=False):
+		"""Return any accumulated errors."""
+		while(self.check_error()):
+			self.clear()
+		if(reset) : self.reset()
 
 class FakeInstrument(Instrument):
 	""" Fake implementation for testing purposes. """
 
-	def __init__(self, name=None, adapter=None, includeSCPI=False, **kwargs):
-		super().__init__(name or "Fake Instrument", FakeAdapter(), includeSCPI=includeSCPI, **kwargs)
+	def __init__(self, name=None, adapter=None, enableSCPI=False, **kwargs):
+		super().__init__(name or "Fake Instrument", FakeAdapter(), enableSCPI=enableSCPI, **kwargs)
 
 	@staticmethod
 	def control(get_command, set_command, docs, validator=lambda v, vs: v, values=(), map_values=False,
@@ -464,21 +489,21 @@ class FakeInstrument(Instrument):
 								  check_set_errors=check_set_errors,
 								  check_get_errors=check_get_errors, **kwargs)
 
+	
+class Meter(Instrument):
+	""" Intermediate class for meter-type equipment. """
+
+	def __init__(self, name, adapter, enableSCPI=False, **kwargs):
+		super(Meter,self).__init__(name, adapter, enableSCPI, **kwargs)
 
 class RFInstrument(Instrument):
 	""" Intermediate class for RF-type equipment. """
 
-	def __init__(self, name, adapter, includeSCPI=False, **kwargs):
-		super(RFInstrument,self).__init__(name, adapter, includeSCPI, **kwargs)
+	def __init__(self, name, adapter, enableSCPI=False, **kwargs):
+		super(RFInstrument,self).__init__(name, adapter, enableSCPI, **kwargs)
 
 class RFSweepInstrument(Instrument):
 	""" Intermediate class for RF-type equipment that sweep through a frequency range. """
 
-	def __init__(self, name, adapter, includeSCPI=False, **kwargs):
-		super(RFSweepInstrument,self).__init__(name, adapter, includeSCPI, **kwargs)
-
-class Meter(Instrument):
-	""" Intermediate class for meter-type equipment. """
-
-	def __init__(self, name, adapter, includeSCPI=False, **kwargs):
-		super(Meter,self).__init__(name, adapter, includeSCPI, **kwargs)
+	def __init__(self, name, adapter, enableSCPI=False, **kwargs):
+		super(RFSweepInstrument,self).__init__(name, adapter, enableSCPI, **kwargs)

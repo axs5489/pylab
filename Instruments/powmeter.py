@@ -1,10 +1,21 @@
-from Instruments.instrument import Instrument, RFInstrument
+from Instruments.instrument import Channel, Instrument, RFInstrument
 from Instruments.validators import strict_range, strict_discrete_set
 import time
 
+class PMChannel(Channel):
+	def __init__(self, channel, adapter, parent, **kwargs):
+		super(PMChannel, self).__init__(channel, adapter, parent, **kwargs)
+	
+	power = Instrument.measurement("FETC?", "Power, in dB or W")
+	def fetchPower(self, debugOn = False):
+		if debugOn : print("*** FETCH ****")
+		pwr = float(self.query("FETC?"))
+		if debugOn : print("POWER: ", pwr)
+		return pwr
+		
 class PowerMeter(RFInstrument):
 	models = ["PM", "E4418B"]
-	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
+	def __init__(self, name, adapter, **kwargs):
 		super(PowerMeter, self).__init__(name, adapter, enableSCPI, **kwargs)
 		self._num_channels = 1
 		try:
