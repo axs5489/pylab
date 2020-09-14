@@ -5,47 +5,53 @@ import visa
 from Adapters.adapter import FakeAdapter
 from Adapters.visa import VISAAdapter
 
+def splitResourceID(idn, debugOn = False):
+	try:
+		ci1 = idn.index(',')
+		ci2 = idn.index(',', ci1 + 1)
+		ci3 = idn.index(',', ci2 + 1)
+		mfg = idn[0:ci1].strip()
+		mdl = idn[ci1+1 : ci2].strip()
+		sn = idn[ci2+1 : ci3].strip()
+	except ValueError:
+		print("IDN is in improper format")
+		return None
+	res = (mfg, mdl, sn)
+	if debugOn : print(ci1, mfg)
+	if debugOn : print(ci2, mdl)
+	if debugOn : print(ci3, sn)
+	return res
+
 class BaseInstrument():
 	""" Base class for all Instruments, independent of Adapter used to communicate with the instrument.
 		:param makemodel: A string name
 		:param adapter: An :class:`Adapter<l3hlib.Adapters.adapter>` object
 	"""
 	models = []
-	_LEVELS = ["MIN", "MAX"]
+	_LEVELS = ["MIN", "MAX", "DEF"]
 	_MODES = ["LOC", "REM", "LLO"]
-	_ONOFF = ["OFF", "ON"]
+	_ONOFF = [0, 1, "OFF", "ON"]
 	
-	def __init__(self, makemodel, adapter, **kwargs):
+	def __init__(self, name, adapter, **kwargs):
 		try:
 			if isinstance(adapter, (int, str)):
 				print(adapter)
 				try:
-					rm = visa.ResourceManager()
-					resource = rm.open_resource(adapter)
-					adapter = VISAAdapter(adapter, resource, **kwargs)
+					adapter = VISAAdapter(adapter, adapter, **kwargs)
 				except visa.VisaIOError as e:
-					print(resource, ":", "Visa IO Error: check connections")
+					print("Visa IO Error: check connections")
 					print(e)
 				
 		except ImportError:
 			raise Exception("Invalid Adapter provided for Instrument since PyVISA is not present")
-
-		self._name = makemodel
+		self._name = name
 		self._adapter = adapter
-		if(type(makemodel) is list):
-			self._mfg = makemodel[0]
-			self._mdl = makemodel[1]
-			self._sn = makemodel[2]
 		
 		self._active = True
 		
 	def close(self):
 		self._name = None
 		self._adapter = None
-		if(type(self._name) is list):
-			self._mfg = None
-			self._mdl = None
-			self._sn = None
 
 	def __del__(self):
 		self.close()
@@ -59,6 +65,7 @@ class BaseInstrument():
 			if(result):
 				#print(result, cls.models[0])
 				return cls.models[0]
+		return None
 
 	@property
 	def id(self):
@@ -409,7 +416,7 @@ class Channel(BaseInstrument):
 	""" Intermediate class for equipment with multiple channels. """
 
 	def __init__(self, channel, adapter, parent, **kwargs):
-		super(Channel,self).__init__(str(channel), adapter, True, **kwargs)
+		super(Channel,self).__init__(str(channel), adapter, **kwargs)
 		self.chnum = channel
 		self.parent = parent
 	
@@ -424,12 +431,17 @@ class Channel(BaseInstrument):
 class Instrument(BaseInstrument):
 	""" Intermediate class for equipment with multiple channels. """
 
-	def __init__(self, channel, parent, adapter, enableSCPI=False, **kwargs):
-		super(Instrument,self).__init__(str(channel), adapter, **kwargs)
-		if enableSCPI:
-			# Basic SCPI commands
-			self.status = self.measurement("*STB?", """ Returns the status of the instrument """)
-			self.complete = self.measurement("*OPC?", """ TODO: Add this doc """)
+	def __init__(self, name, adapter, **kwargs):
+		super(Instrument,self).__init__(str(name), adapter, **kwargs)
+		if(isinstance(name, str)):
+			name = splitResourceID(name)
+		if(isinstance(name, tuple)):
+			self._mfg = name[0]
+			self._mdl = name[1]
+			self._sn = name[2]
+		# Basic SCPI commands
+		self.status = self.measurement("*STB?", """ Returns the status of the instrument """)
+		self.complete = self.measurement("*OPC?", """ TODO: Add this doc """)
 		#print(self.display())
 		#print(self.selftest())
 		#print(self.version())
@@ -456,11 +468,15 @@ class Instrument(BaseInstrument):
 			self.clear()
 		if(reset) : self.reset()
 
+	def wait(self):
+		return self.write("*WAI")
+		
+
 class FakeInstrument(Instrument):
 	""" Fake implementation for testing purposes. """
 
-	def __init__(self, name=None, adapter=None, enableSCPI=False, **kwargs):
-		super().__init__(name or "Fake Instrument", FakeAdapter(), enableSCPI=enableSCPI, **kwargs)
+	def __init__(self, name=None, adapter=None, **kwargs):
+		super().__init__(name or "Fake Instrument", FakeAdapter(), **kwargs)
 
 	@staticmethod
 	def control(get_command, set_command, docs, validator=lambda v, vs: v, values=(), map_values=False,
@@ -490,20 +506,26 @@ class FakeInstrument(Instrument):
 								  check_get_errors=check_get_errors, **kwargs)
 
 	
+class MathInstrument(Instrument):
+	""" Class for equipment with Math capabilities. """
+
+	def __init__(self, name, adapter, **kwargs):
+		super(MathInstrument,self).__init__(name, adapter, **kwargs)
+	
 class Meter(Instrument):
 	""" Intermediate class for meter-type equipment. """
 
-	def __init__(self, name, adapter, enableSCPI=False, **kwargs):
-		super(Meter,self).__init__(name, adapter, enableSCPI, **kwargs)
+	def __init__(self, name, adapter, **kwargs):
+		super(Meter,self).__init__(name, adapter, **kwargs)
 
 class RFInstrument(Instrument):
 	""" Intermediate class for RF-type equipment. """
 
-	def __init__(self, name, adapter, enableSCPI=False, **kwargs):
-		super(RFInstrument,self).__init__(name, adapter, enableSCPI, **kwargs)
+	def __init__(self, name, adapter, **kwargs):
+		super(RFInstrument,self).__init__(name, adapter, **kwargs)
 
 class RFSweepInstrument(Instrument):
 	""" Intermediate class for RF-type equipment that sweep through a frequency range. """
 
-	def __init__(self, name, adapter, enableSCPI=False, **kwargs):
-		super(RFSweepInstrument,self).__init__(name, adapter, enableSCPI, **kwargs)
+	def __init__(self, name, adapter, **kwargs):
+		super(RFSweepInstrument,self).__init__(name, adapter, **kwargs)
