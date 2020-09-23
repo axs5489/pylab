@@ -31,6 +31,7 @@ class BaseInstrument():
 	_LEVELS = ["MIN", "MAX", "DEF"]
 	_MODES = ["LOC", "REM", "LLO"]
 	_ONOFF = [0, 1, "OFF", "ON"]
+	_ACDC = ["AC", "DC"]
 	
 	def __init__(self, name, adapter, **kwargs):
 		try:
@@ -78,7 +79,7 @@ class BaseInstrument():
 	# Wrapper functions for the Adapter object
 	def ask(self, command):
 		""" Sends command to the instrument and returns the read response. """
-		return self._adapter.ask(command)
+		return self._adapter.ask(command).strip()
 	query = ask
 
 	def write(self, command):
@@ -89,17 +90,9 @@ class BaseInstrument():
 		""" Returns read response from instrument through its adapter. """
 		return self._adapter.read()
 
-	def readValue(self):
-		""" Returns measurement value at next trigger """
-		return self.ask("READ?")
-
-	def measure(self):
-		""" Returns measurement value """
-		return self.ask("MEAS?")
-
-	def trigger(self):
-		"""Trigger a measurement"""
-		self.write("*TRG")
+	def value(self, command, **kwargs):
+		""" Reads a value from the instrument through the adapter. """
+		return self._adapter.values(command, **kwargs)[0]
 
 	def values(self, command, **kwargs):
 		""" Reads a set of values from the instrument through the adapter,
@@ -109,10 +102,6 @@ class BaseInstrument():
 
 	def binary_values(self, command, header_bytes=0, dtype=np.float32):
 		return self._adapter.binary_values(command, header_bytes, dtype)
-
-	def beep(self):
-		""" Clears the instrument status byte """
-		self.write("SYST:BEEP")
 	
 	def configure(self, func):
 		""" Configures instrument for function """
@@ -325,93 +314,6 @@ class BaseInstrument():
 		return property(fget, fset)
 
 
-	def configure_display_scale(self, reference_value, reference_position=None,
-								number_of_divisions=None, scale_per_division=None):
-		self.write('DISP:WIND1:TRAC1:Y:RLEV ' + str(reference_value))
-
-		if not reference_position == None:
-			self.write('DISP:WIND1:TRAC1:Y:RPOS ' + str(reference_position))
-
-		if not number_of_divisions == None:
-			self.write('DISP:WIND1:Y:DIV ' + str(number_of_divisions))
-
-		if not scale_per_division == None:
-			self.write('DISP:WIND1:TRAC1:Y:PDIV ' + str(scale_per_division))
-
-	def set_background_color(self, red, green, blue):
-		''' Colors are integers of range 0 through 5'''
-		self.write('DISP:COL:BACK ' + str(red) + ',' + str(green) + ',' + str(blue))
-
-	def set_graticule_color(self, red, green, blue):
-		''' Colors are integers of range 0 through 5'''
-		self.write('DISP:COL:GRAT ' + str(red) + ',' + str(green) + ',' + str(blue))
-
-	def set_grid_color(self, red, green, blue):
-		''' Colors are integers of range 0 through 5'''
-		self.write('DISP:COL:GRAT2 ' + str(red) + ',' + str(green) + ',' + str(blue))
-
-	def get_bandwidth_measure(self, dB_down=None):
-		self.write(':CALC1:MARK1:BWID ON')
-		if not dB_down == None:
-			self.write(':CALC1:MARK1:BWID:THR ' + str(dB_down))
-		return [float(i) for i in (self.ask(':CALC1:MARK:BWID:DATA?').split(','))]
-
-	def max_search(self, marker=1):
-		''' Enable max search, find max, and return X and Y positions'''
-		marker_text = 'MARK' + str(marker)
-
-		self.write(':CALC:' + marker_text + ' ON')
-		self.write(':CALC:' + marker_text + ':FUNC:TYPE MAX')
-		self.write(':CALC:' + marker_text + ':FUNC:EXEC')
-
-		return (float(self.ask(':CALC:' + marker_text + ':X?')),
-				float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0]))
-
-	def min_search(self, marker=1):
-		'''Enable min search, find min, and return X and Y positions'''
-		marker_text = 'MARK' + str(marker)
-
-		self.write(':CALC:' + marker_text + ' ON')
-		self.write(':CALC:' + marker_text + ':FUNC:TYPE MIN')
-		self.write(':CALC:' + marker_text + ':FUNC:EXEC')
-
-		return (float(self.ask(':CALC:' + marker_text + ':X?')),
-				float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0]))
-
-	def peak_search(self):
-		''' Enable peak search, find peak, and return X and Y positions'''
-		self.write(':CALC:MARK1:FUNC:TYPE PEAK')
-		self.write(':CALC:MARK1:FUNC:EXEC')
-		return float(self.ask(':CALC:MARK1:X?')), float(self.ask(':CALC:MARK1:Y?').split(',')[0])
-
-
-	def get_trace(self):
-		freqList = [float(i) for i in self.ask(':SENS1:FREQ:DATA?').split(',')]
-		amplList = [float(i) for i in self.ask(':CALC1:DATA:FDAT?').split(',')[::2]]
-		return np.transpose([freqList, amplList])
-
-	def set_marker(self, freq, marker=None):
-		if marker == None:
-			marker = 1
-
-		marker_text = 'MARK' + str(marker)
-
-		self.write(':CALC:' + marker_text + ':X ' + str(freq))
-		return float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0])
-
-	def get_marker_value(self, marker=None):
-		if marker == None:
-			marker = 1
-
-		marker_text = 'MARK' + str(marker)
-
-		return float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0])
-
-	def save_trace(self, filename):
-		np.savetxt(filename, self.get_trace(), delimiter='\t')
-		return 0
-
-
 class Channel(BaseInstrument):
 	""" Intermediate class for equipment with multiple channels. """
 
@@ -448,6 +350,25 @@ class Instrument(BaseInstrument):
 		#print(self.status())
 		#self.beep()
 		#self.recover(True)
+
+	def beep(self):
+		""" Clears the instrument status byte """
+		self.write("SYST:BEEP")
+	
+	def fetch(self):
+		return self.value("FETC?")
+
+	def readValue(self):
+		""" Returns measurement value at next trigger """
+		return self.value("READ?")
+
+	def measure(self):
+		""" Returns measurement value """
+		return self.value("MEAS?")
+
+	def trigger(self):
+		"""Trigger a measurement"""
+		self.write("*TRG")
 
 	def error(self):
 		"""Return any accumulated errors."""

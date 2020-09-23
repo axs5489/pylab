@@ -4,17 +4,16 @@ import numpy as np
 
 class DMM(Meter):
 	models = ["DMM", r"884\dA", r"34410A"]
-	functions = ["CAP", "CONT", "CURR:AC", "CURR:DC", "DIOD", "FRES", "FREQ", "PER", "RES", "TEMP:FRTD", "TEMP:RTD", "VOLT:AC", "VOLT:DC", "VOLT:DC:RAT"]
-	VALID_ARGS = ['DEF', 'MIN', 'MAX']
+	_FUNC = ["CAP", "CONT", "CURR:AC", "CURR:DC", "DIOD", "FRES", "FREQ", "PER", "RES", "TEMP:FRTD", "TEMP:RTD", "VOLT:AC", "VOLT:DC", "VOLT:DC:RAT"]
 	VALID_TYPE_ARGS = ['AC','DC','DC:RAT']
 	
-	def __init__(self, makemodel, adapter, enableSCPI=True, **kwargs):
-		super(DMM, self).__init__(makemodel, adapter, enableSCPI, **kwargs)
+	def __init__(self, makemodel, adapter, **kwargs):
+		super(DMM, self).__init__(makemodel, adapter, **kwargs)
 		self._range = 'DEF'
 		self._resolution = 'DEF'
 
 	mode = Instrument.control('FUNC?"','FUNC "%s"', "FUNCTION",
-							strict_discrete_set, functions)
+							strict_discrete_set, _FUNC)
 	
 	cap = Instrument.measurement("MEAS:CAP? DEF,DEF", "Capacitance, in Farads")
 	def capacitance(self, trig=True):
@@ -100,100 +99,19 @@ class DMM(Meter):
 	def getTerminal(self): return Instrument.measurement("ROUT:TERM?", "Determine Front/Rear Terminals")
 		
 	def resolution(self,res='DEF'):
-		if res.upper() in self.VALID_ARGS:
+		if res.upper() in self._LEVELS:
 			self._resolution = res
 		else:
 			try:
 				self._resolution = float(res)
 			except:
-				raise Exception('resolution argument is type (%s) must be float type or valid keyword (%s)'%(type(range),self.VALID_ARGS))
+				raise Exception('resolution argument is type (%s) must be float type or valid keyword (%s)'%(type(range),self._LEVELS))
 		
 	def range(self,range='DEF'):
-		if range.upper() in self.VALID_ARGS:
+		if range.upper() in self._LEVELS:
 			self._range = range
 		else:
 			try:
 				self._range = float(range)
 			except:
-				raise Exception('range argument is type (%s) must be float type or valid keyword (%s)'%(type(range),self.VALID_ARGS))
-
-
-	def set_averaging(self, enable, number_of_averages=None):
-		scpi_parameter = 'ON' if enable else 'OFF'
-		self.write(':SENS:AVER ' + scpi_parameter)
-
-		if not number_of_averages == None:
-			self.write(':SENS:AVER:COUN ' + str(number_of_averages))
-
-	def restart_averaging(self):
-		self.write(':SENS:AVER:CLE')
-
-	def get_sweep_time(self):
-		return float(self.ask(':SENS1:SWE:TIME?'))
-
-	def get_bandwidth_measure(self, dB_down=None):
-		self.write(':CALC1:MARK1:BWID ON')
-		if not dB_down == None:
-			self.write(':CALC1:MARK1:BWID:THR ' + str(dB_down))
-		return [float(i) for i in (self.ask(':CALC1:MARK:BWID:DATA?').split(','))]
-
-	def peak_search(self):
-		''' Enable peak search, find peak, and return X and Y positions'''
-		self.write(':CALC:MARK1:FUNC:TYPE PEAK')
-		self.write(':CALC:MARK1:FUNC:EXEC')
-		return float(self.ask(':CALC:MARK1:X?')), float(self.ask(':CALC:MARK1:Y?').split(',')[0])
-
-	def max_search(self, marker=None):
-		''' Enable max search, find max, and return X and Y positions'''
-		if marker == None:
-			marker = 1
-
-		marker_text = 'MARK' + str(marker)
-
-		self.write(':CALC:' + marker_text + ' ON')
-		self.write(':CALC:' + marker_text + ':FUNC:TYPE MAX')
-		self.write(':CALC:' + marker_text + ':FUNC:EXEC')
-
-		return (float(self.ask(':CALC:' + marker_text + ':X?')),
-				float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0]))
-
-	def min_search(self, marker=None):
-		'''Enable min search, find min, and return X and Y positions'''
-		if marker == None:
-			marker = 1
-
-		marker_text = 'MARK' + str(marker)
-
-		self.write(':CALC:' + marker_text + ' ON')
-		self.write(':CALC:' + marker_text + ':FUNC:TYPE MIN')
-		self.write(':CALC:' + marker_text + ':FUNC:EXEC')
-
-		return (float(self.ask(':CALC:' + marker_text + ':X?')),
-				float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0]))
-
-
-	def get_trace(self):
-		freqList = [float(i) for i in self.ask(':SENS1:FREQ:DATA?').split(',')]
-		amplList = [float(i) for i in self.ask(':CALC1:DATA:FDAT?').split(',')[::2]]
-		return np.transpose([freqList, amplList])
-
-	def set_marker(self, freq, marker=None):
-		if marker == None:
-			marker = 1
-
-		marker_text = 'MARK' + str(marker)
-
-		self.write(':CALC:' + marker_text + ':X ' + str(freq))
-		return float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0])
-
-	def get_marker_value(self, marker=None):
-		if marker == None:
-			marker = 1
-
-		marker_text = 'MARK' + str(marker)
-
-		return float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0])
-
-	def save_trace(self, filename):
-		np.savetxt(filename, self.get_trace(), delimiter='\t')
-		return 0
+				raise Exception('range argument is type (%s) must be float type or valid keyword (%s)'%(type(range),self._LEVELS))

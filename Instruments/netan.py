@@ -3,8 +3,8 @@ import numpy as np
 
 class NetAnalyzer(Instrument):
 	models = ["NA", "E507\dC"]
-	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
-		super(NetAnalyzer, self).__init__(name, adapter, enableSCPI, **kwargs)
+	def __init__(self, name, adapter, **kwargs):
+		super(NetAnalyzer, self).__init__(name, adapter, **kwargs)
 
 	def set_frequency_start_stop(self, start, stop):
 		self.write(':SENS1:FREQ:STAR ' + str(start))

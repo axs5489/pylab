@@ -5,8 +5,8 @@ import numpy as np
 class SpecAnalyzer(Instrument):
 	models = ["SpA", "E440\dB"]
 	
-	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
-		super(SpecAnalyzer, self).__init__(name, adapter, enableSCPI, **kwargs)
+	def __init__(self, name, adapter, **kwargs):
+		super(SpecAnalyzer, self).__init__(name, adapter, **kwargs)
 	
 	start_frequency = Instrument.control(":SENS:FREQ:STAR?;", ":SENS:FREQ:STAR %e Hz;",
 		""" A floating point property that represents the start frequency (Hz)."""

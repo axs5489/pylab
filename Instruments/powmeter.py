@@ -12,19 +12,19 @@ class PMChannel(Channel):
 		return self.query("INIT{}".format(self.chnum))
 	
 	def measure(self):
-		return self.query("MEAS{}?".format(self.chnum))
+		return self.value("MEAS{}?".format(self.chnum))
 	
 	def power(self):
-		return self.query("FETC{}?".format(self.chnum))
+		return self.value("FETC{}?".format(self.chnum))
 			
 	def powerStable(self, delay = 0.1, timeout = 10, maxtol = 0.05):
 		stable = 0
 		maxattempts = 200
-		lastpwr = float(self.query("FETC?"))
+		lastpwr = float(self.value("FETC?"))
 		lasttime = time.perf_counter()
 		for i in range(maxattempts):
 			time.sleep(delay)
-			pwr = float(self.query("FETC?"))
+			pwr = float(self.value("FETC?"))
 			dev = abs(pwr - lastpwr)/pwr
 			if(dev < maxtol) :
 				stable += 1
@@ -36,13 +36,13 @@ class PMChannel(Channel):
 		return None
 	
 	def read(self):
-		return self.query("READ{}?".format(self.chnum))
+		return self.value("READ{}?".format(self.chnum))
 	
 	def offset(self, offset = None):
 	#   MIN      DEF       MAX        UNITS
 	#  -100 << (  0  ) << +100    W / % / dBm / dB
 		if(offset == None):
-			return self.query("CALC{}:GAIN?".format(self.chnum))
+			return self.value("CALC{}:GAIN?".format(self.chnum))
 		elif(isinstance(offset, int) or isinstance(offset, float)):
 			self.write("CALC{}:GAIN {}".format(self.chnum, offset))
 		else:
@@ -63,6 +63,14 @@ class PMChannel(Channel):
 			self.write("UNIT{}:POW {}".format(self.chnum, unit))
 		else:
 			print("INVALID UNITS: ", unit)
+	
+	def freq(self, f = None):
+		if(f == None):
+			return self.value("SENS{}:FREQ?".format(self.chnum))
+		elif(isinstance(f, int) or isinstance(f, float) or isinstance(f, str)):
+			self.write("SENS{}:FREQ {}".format(self.chnum, f))
+		else:
+			print("INVALID PM FREQ: ", f)
 	
 	# TTL OUTPUT LIMITS / FAILURES
 	def MATH(self, sens = None):

@@ -4,8 +4,8 @@ import urllib.request
 
 class rfSW(Instrument):
 	models = ["RF"]
-	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
-		super(rfSW, self).__init__(name, adapter, enableSCPI, **kwargs)
+	def __init__(self, name, adapter, **kwargs):
+		super(rfSW, self).__init__(name, adapter, **kwargs)
 		try:
 			self.dev
 		except:

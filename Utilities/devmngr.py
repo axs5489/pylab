@@ -10,16 +10,18 @@ from Instruments import Adu2xx
 from Instruments.audiomod import AudioAnalyzer
 from Instruments.dmm import DMM
 from Instruments.fireberd import FireBERD
+from Instruments.freqcount import FreqCounter
 from Instruments.generators import SigGen, ArbGen
-from Instruments.gps import GPS
+from Instruments.instrument import splitResourceID
+from Instruments.gps import GSG
 from Instruments.netan import NetAnalyzer
-from Instruments.powmeter import PowerMeter, DualPowerMeter
+from Instruments.powmeter import PowerMeter#, DualPowerMeter
 from Instruments.powsupply import PS
 from Instruments.rfswitch import rfSW
 from Instruments.scope import Oscilloscope
 from Instruments.specan import SpecAnalyzer
-import Radio
-from Radio import *
+import Radio.radio
+from Radio.radio import *
 import Utilities.win
 import Utilities.config
 import time
@@ -27,27 +29,9 @@ import visa
 
 adu_types = ["ADU"]
 com_types = ["CON", "STP", "RCP", "RED", "BLK", "RUT", "BUT", "RFSW"]
-res_types = [AudioAnalyzer, ArbGen, DMM, FireBERD, NetAnalyzer, PowerMeter, DualPowerMeter,
-			PS, rfSW, SigGen, GPS, SpecAnalyzer, Oscilloscope]
+res_types = [AudioAnalyzer, ArbGen, DMM, FireBERD, FreqCounter, NetAnalyzer, 
+			 PowerMeter, PS, rfSW, SigGen, GSG, SpecAnalyzer, Oscilloscope]
 
-
-def splitResourceID(idn, debugOn = False):
-	try:
-		ci1 = idn.index(',')
-		ci2 = idn.index(',', ci1 + 1)
-		ci3 = idn.index(',', ci2 + 1)
-		mfg = idn[0:ci1].strip()
-		mdl = idn[ci1+1 : ci2].strip()
-		sn = idn[ci2+1 : ci3].strip()
-	except ValueError:
-		print("IDN is in improper format")
-		return None
-	res = [mfg, mdl, sn]
-	if debugOn : print(ci1, mfg)
-	if debugOn : print(ci2, mdl)
-	if debugOn : print(ci3, sn)
-	
-	return res
 
 class Station():
 	def __init__(self, logfile=None, debugOn=False):
@@ -124,7 +108,7 @@ class Station():
 				self._resources["CON"].append(addr)
 			else:
 				self._resources["VISA"].append(addr)
-		if self._debugOn : print('Configured: \n\n', self._resources,'\n\n')
+		if self._debugOn : print('\nConfigured: \n\n', self._resources,'\n\n')
 		self.init_resources()
 		if self._debugOn :
 			print('Available Instruments: \n\n', self._instruments,'\n\n')
@@ -139,6 +123,7 @@ class Station():
 				#1 : GPIB0::26::INSTR : Keithley Instruments Inc., Model 2612, *****
 			dmm = Agilent34410(resources[0])
 		"""
+		if self._debugOn : print('INITIALIZING')
 		for typ, reslist in self._resources.items():
 			if(typ == "ADU"):
 				self._hardreset = True

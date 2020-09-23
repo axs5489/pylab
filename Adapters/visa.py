@@ -33,7 +33,7 @@ class VISAAdapter(Adapter):
 		#self.connection = self.manager.get_instrument(resourceName, **kwargs)
 
 	def __repr__(self):
-		return "<VISAAdapter(resource='%s')>" % self.connection.resourceName
+		return "<VISAAdapter(resource='%s')>" % self.connection
 
 	def ask(self, command):
 		""" Writes the command to the instrument and returns the resulting
@@ -54,9 +54,18 @@ class VISAAdapter(Adapter):
 		"""
 		return self.connection.query_values(command)
 
-	def write(self, command):
-		""" Writes an SCPI command string to the instrument """
+	def binary_values(self, command, header_bytes=0, dtype=np.float32):
+		""" Returns a numpy array from a query for binary data
+
+		:param command: SCPI command to be sent to the instrument
+		:param header_bytes: Integer number of bytes to ignore in header
+		:param dtype: The NumPy data type to format the values with
+		:returns: NumPy array of values
+		"""
 		self.connection.write(command)
+		binary = self.connection.read_raw()
+		header, data = binary[:header_bytes], binary[header_bytes:]
+		return np.fromstring(data, dtype=dtype)
 
 	def read(self):
 		""" Reads until the buffer is empty and returns the resulting ASCII response """
@@ -71,18 +80,9 @@ class VISAAdapter(Adapter):
 		"""
 		return self.connection.read_bytes(size)
 
-	def binary_values(self, command, header_bytes=0, dtype=np.float32):
-		""" Returns a numpy array from a query for binary data
-
-		:param command: SCPI command to be sent to the instrument
-		:param header_bytes: Integer number of bytes to ignore in header
-		:param dtype: The NumPy data type to format the values with
-		:returns: NumPy array of values
-		"""
+	def write(self, command):
+		""" Writes an SCPI command string to the instrument """
 		self.connection.write(command)
-		binary = self.connection.read_raw()
-		header, data = binary[:header_bytes], binary[header_bytes:]
-		return np.fromstring(data, dtype=dtype)
 
 	def config(self, is_binary=False, datatype='str', container=np.array, converter='s',
 			   separator=',', is_big_endian=False):

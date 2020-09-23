@@ -120,8 +120,8 @@ class ScopeChannel(Channel):
 class Oscilloscope(Instrument):
 	models = ["SCP", "[DM]SO\d\d\d\d[ABCD]?"]
 	acq_modes = ["AVE", "ENV", "SAM", "PEAK", "HIR"]
-	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
-		super(Oscilloscope, self).__init__(name, adapter, enableSCPI, **kwargs)
+	def __init__(self, name, adapter, **kwargs):
+		super(Oscilloscope, self).__init__(name, adapter, **kwargs)
 		self._maxsamplerate = self.query("ACQuire:MAXSamplerate?")
 		self.ch1 = ScopeChannel(self, 1)
 		self.ch2 = ScopeChannel(self, 2)

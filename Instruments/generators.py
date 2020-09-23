@@ -3,8 +3,8 @@ from Instruments.validators import strict_range, strict_discrete_set, truncated_
 
 class SigGen(RFInstrument):
 	models = ["SG", r"8257D", r"E443\d[CD]"]
-	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
-		super(SigGen, self).__init__(name, adapter, enableSCPI, **kwargs)
+	def __init__(self, name, adapter, **kwargs):
+		super(SigGen, self).__init__(name, adapter, **kwargs)
 		self.amplitude_units = 'Vpp'
 
 	def set_frequency_start_stop(self, start, stop):
@@ -275,8 +275,8 @@ class SigGen(RFInstrument):
 
 class VectorSigGen(SigGen):
 	models = ["AWG", r"HP\dA"]
-	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
-		super(VectorSigGen, self).__init__(name, adapter, enableSCPI, **kwargs)
+	def __init__(self, name, adapter, **kwargs):
+		super(VectorSigGen, self).__init__(name, adapter, **kwargs)
 
 
 class ArbGen(SigGen):
@@ -288,8 +288,8 @@ class ArbGen(SigGen):
 		'ramp':'RAMP', 'noise':'NOIS', 'dc':'DC', 'user':'USER'
 	}
 	
-	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
-		super(SigGen, self).__init__(name, adapter, enableSCPI, **kwargs)
+	def __init__(self, name, adapter, **kwargs):
+		super(SigGen, self).__init__(name, adapter, **kwargs)
 
 	shape = Instrument.control("SOUR:FUNC:SHAP?", "SOUR:FUNC:SHAP %s",
 		""" A string property that controls the shape of the wave,

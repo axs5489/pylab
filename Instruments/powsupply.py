@@ -7,8 +7,8 @@ class PSChannel(Channel):
 
 class PS(Instrument):
 	models = ["PS", "GENH\d\d-\d\d"]
-	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
-		super(PS, self).__init__(name, adapter, enableSCPI, **kwargs)
+	def __init__(self, name, adapter, **kwargs):
+		super(PS, self).__init__(name, adapter, **kwargs)
 		self.write('SYST:ERR:ENABLE')
 
 # 	mode = Instrument.control("SYST:SET %s", "SYST:SET?", "Output state, REM or LOC",

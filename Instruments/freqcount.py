@@ -3,210 +3,176 @@ from Instruments.validators import strict_discrete_set
 import numpy as np
 
 class FreqCounterChannel(Channel):
+	_ATT = [1, 10]
+	_IMP = [50, 1000000, "50", "1E6"]
 	def __init__(self, channel, adapter, parent, **kwargs):
 		super(FreqCounterChannel, self).__init__(channel, adapter, parent, **kwargs)
 	
-	cpl = Instrument.measurement("MEAS:CAP? DEF,DEF", "Capacitance, in Farads")
-	def coupling(self, trig=True):
-		if trig:
-			return float(self.query("MEAS:CAP? %s, %s"%(self._range,self._resolution)))
+	def atten(self, att = None):
+		if(att == None):
+			return self.value("INP{}:ATT?".format(self.chnum))
+		elif(isinstance(att, int) or isinstance(att, float)):
+			self.write("INP{}:ATT {}".format(self.chnum, att))
 		else:
-			return Instrument.configure("CAP")
+			print("INVALID ATTENUATION: ", att)
+	
+	def coupling(self, cpl = None):
+		if(cpl == None):
+			return self.query("INP{}:COUP?".format(self.chnum))
+		elif(cpl in self._ACDC):
+			self.write("INP{}:COUP {}".format(self.chnum, cpl))
+		else:
+			print("INVALID COUPLING: ", cpl)
+	
+	def filter(self, flt = None):
+		if(flt == None):
+			return self.query("INP{}:FILT?".format(self.chnum))
+		elif(flt in self._ONOFF):
+			self.write("INP{}:FILT {}".format(self.chnum, flt))
+		else:
+			print("INVALID 100 kHz FILTER STATE: ", flt)
+	
+	def imp(self, imp = None):
+		if(imp == None):
+			return self.value("INP{}:IMP?".format(self.chnum))
+		elif(imp in self._IMP):
+			self.write("INP{}:IMP {}".format(self.chnum, imp))
+		else:
+			print("INVALID IMPEDANCE: ", imp)
 
 class FreqCounter(Meter):
 	models = ["CNT", r"5313\dA"]
-	functions = ["CAP", "CONT", "CURR:AC", "CURR:DC", "DIOD", "FRES", "FREQ", "PER", "RES", "TEMP:FRTD", "TEMP:RTD", "VOLT:AC", "VOLT:DC", "VOLT:DC:RAT"]
-	VALID_ARGS = ['DEF', 'MIN', 'MAX']
-	VALID_TYPE_ARGS = ['AC','DC','DC:RAT']
+	_FUNC = ["MIN", "MAX", "PTP", "TOT:CONT"] # Single channel measurements w/ no params
+	_FUNC1 = ["DCYCLE", "FTIME", "RTIME", "NWIDTH", "PWIDTH", "TOT:TIM"] # Single channel measurements w/ param(s)
+	_FUNC2 = ["PHASE", "TINT"]		# 2-channel measurements
+	_FUNC3 = ["FREQ", "PER"]		# Single channel measurements supporting CH3
+	_PCNT = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
 	
-	def __init__(self, makemodel, adapter, enableSCPI=True, **kwargs):
-		super(FreqCounter, self).__init__(makemodel, adapter, enableSCPI, **kwargs)
+	def __init__(self, makemodel, adapter, **kwargs):
+		super(FreqCounter, self).__init__(makemodel, adapter, **kwargs)
 		self.ch1 = FreqCounterChannel(1, adapter, self, **kwargs)
-		self.ch2 = FreqCounterChannel(1, adapter, self, **kwargs)
-		self._range = 'DEF'
-		self._resolution = 'DEF'
-
-	mode = Instrument.control('FUNC?"','FUNC "%s"', "FUNCTION",
-							strict_discrete_set, functions)
+		self.ch2 = FreqCounterChannel(2, adapter, self, **kwargs)
+		self._func = ''
 	
-	cap = Instrument.measurement("MEAS:CAP? DEF,DEF", "Capacitance, in Farads")
-	def capacitance(self, trig=True):
-		if trig:
-			return float(self.query("MEAS:CAP? %s, %s"%(self._range,self._resolution)))
-		else:
-			return Instrument.configure("CAP")
-	
-	cont = Instrument.measurement("MEAS:CONT?", "Continuity, in Ohms")
-	def continuity(self, trig=True):
-		if trig:
-			return float(self.query("MEAS:CONT?"))
-		else:
-			return Instrument.configure("CONT")
-	
-	diod = Instrument.measurement("MEAS:DIOD?", "Diode voltage, in Volts")
-	def diode(self, trig=True):
-		if trig:
-			return float(self.query("MEAS:DIOD?"))
-		else:
-			return Instrument.configure("DIOD")
-	
-	freq = Instrument.measurement("MEAS:FREQ? DEF,DEF", "Frequency, in Hertz")
-	per = Instrument.measurement("MEAS:PER? DEF,DEF", "Period, in Seconds")
-	def frequency(self, trig=True):
-		if trig:
-			return float(self.query("MEAS:FREQ? %s, %s"%(self._range,self._resolution)))
-		else:
-			return Instrument.configure("FREQ")
-	def period(self, trig=True):
-		if trig:
-			return float(self.query("MEAS:PER? %s, %s"%(self._range,self._resolution)))
-		else:
-			return Instrument.configure("PER")
-
-	curr_ac = Instrument.measurement("MEAS:CURR:AC? DEF,DEF", "AC current, in Amps")
-	curr_dc = Instrument.measurement("MEAS:CURR:DC? DEF,DEF", "DC current, in Amps")
-	def current(self, trig=True,type='DC'):
-		if type in self.VALID_TYPE_ARGS:
-			if trig:
-				return float(self.query("MEAS:CURR:%s? %s, %s"%(type.upper(),self._range,self._resolution)))
+	def dutyCycle(self, param = 50, source = 1):
+		if(source in [1, 2]):
+			if(param in self._PCNT):
+				self._func = "DCYCLE"
+				return self.value("MEAS:DCYCLE? {},(@{})".format(param, source))
 			else:
-				return Instrument.configure("CURR:%s"%(type.upper()))
+				return print("INVALID FUNCTION PARAMETER: ", param)
+		else:
+			print("INVALID SOURCES: ", source)
 	
-	volt_ac = Instrument.measurement("MEAS:VOLT:AC? DEF,DEF", "AC voltage, in Volts")
-	volt_dc = Instrument.measurement("MEAS:VOLT:DC? DEF,DEF", "DC voltage, in Volts")
-	voltage_ratio = Instrument.measurement("MEAS:VOLT:DC:RAT? DEF,DEF", "DC voltage, in Volts")
-	def voltage(self, trig=True,type='DC'):
-		if type in self.VALID_TYPE_ARGS:
-			if trig:
-				return float(self.query("MEAS:VOLT:%s? %s, %s"%(type.upper(),self._range,self._resolution)))
+	def fallTime(self, lparam = 10, uparam = 90, source = 1):
+		if(source in [1, 2]):
+			if(lparam in self._PCNT and uparam in self._PCNT):
+				self._func = "FTIME"
+				msg = "MEAS:FTIME? {},{},(@{})".format(lparam, uparam, source)
+				print(msg)
+				return self.value(msg)
 			else:
-				return Instrument.configure("VOLT:%s"%(type.upper()))
+				return print("INVALID FUNCTION PARAMETERS: ", lparam, " <- ", uparam)
+		else:
+			print("INVALID SOURCES: ", source)
 	
-	res = Instrument.measurement("MEAS:RES? DEF,DEF", "Resistance, in Ohms")
-	res_4w = Instrument.measurement("MEAS:FRES? DEF,DEF", "Four-wires (remote sensing) resistance, in Ohms")
-	def resistance(self, trig=True,fourwire=False):
-		if trig:
-			if fourwire:
-				return float(self.query("MEAS:TEMP:FRTD? %s, %s"%(self._range,self._resolution)))
+	def riseTime(self, lparam = 10, uparam = 90, source = 1):
+		if(source in [1, 2]):
+			if(lparam in self._PCNT and uparam in self._PCNT):
+				self._func = "RTIME"
+				return self.value("MEAS:RTIME? {},{},(@{})".format(lparam, uparam, source))
 			else:
-				return float(self.query("MEAS:TEMP:RTD? %s, %s"%(self._range,self._resolution)))
+				return print("INVALID FUNCTION PARAMETERS: ", lparam, " -> ", uparam)
 		else:
-			if fourwire:
-				return Instrument.configure("TEMP:FRES")
-			else:
-				return Instrument.configure("TEMP:RES")
+			print("INVALID SOURCES: ", source)
 	
-	temp = Instrument.measurement("MEAS:TEMP:RTD?", "Temperature, in ")
-	temp_4w = Instrument.measurement("MEAS:TEMP:FRTD?", "Four-wire Temperature, in ")
-	def temperature(self, trig=True,fourwire=False):
-		if trig:
-			if fourwire:
-				return float(self.query("MEAS:TEMP:FRTD? %s, %s"%(self._range,self._resolution)))
+	def freq(self, param = "30e6,1e0", source = 1):
+	# Expected Frequency  (MHz)    Resolution (Hz)
+	#   Ch 1, 2 :   0.1 -   225   | 1e-16 to 1e+6
+	#   Ch  3   : 100   - 3,000   |  1e-7 to 1e+7
+		if(source in [1, 2, 3]):
+			self._func = "FREQ"
+			if(param == None):
+				return self.value("MEAS:FREQ? (@{})".format(source))
 			else:
-				return float(self.query("MEAS:TEMP:RTD? %s, %s"%(self._range,self._resolution)))
+				return self.value("MEAS:FREQ? {},(@{})".format(param, source))
 		else:
-			if fourwire:
-				return Instrument.configure("TEMP:FRTD")
+			print("INVALID SOURCES: ", source)
+	
+	def freqRATIO(self, param = None, s1 = 1, s2 = 2):
+		if((s1 == 1 and s2 in [2, 3]) or (s1 in [2, 3] and s2 == 1)):
+			if(param == None):
+				return self.value("MEAS:FREQ:RAT? (@{})".format(param, chan))
+			elif(param > 0 and param < 100):
+				return self.value("MEAS:FREQ:RAT? {},(@{})".format(param, chan))
 			else:
-				return Instrument.configure("TEMP:RTD")
-
-	def getTerminal(self): return Instrument.measurement("ROUT:TERM?", "Determine Front/Rear Terminals")
-		
-	def resolution(self,res='DEF'):
-		if res.upper() in self.VALID_ARGS:
-			self._resolution = res
+				return print("INVALID FUNCTION PARAMETER: ", param)
+			self._func = "FREQ:RAT"
 		else:
-			try:
-				self._resolution = float(res)
-			except:
-				raise Exception('resolution argument is type (%s) must be float type or valid keyword (%s)'%(type(range),self.VALID_ARGS))
-		
-	def range(self,range='DEF'):
-		if range.upper() in self.VALID_ARGS:
-			self._range = range
+			print("INVALID SOURCES: ", s1, " and ", s2)
+	
+	def func(self, f = None, param = None, source = 1, source2 = None):
+		if(f == None):
+			self._func = self.query("CONF?")
+			return self._func
+		elif(f in self._FUNC3 and source in [1,2,3]):
+			if(param == None):
+				self.write("MEAS:{} (@{})".format(f, param, source))
+			elif(param > 0 and param < 100):
+				self.write("MEAS:{} {},(@{})".format(f, param, source))
+			elif(param):
+				self.write("MEAS:{} {},(@{})".format(f, param, source))
+			else:
+				return print("INVALID FUNC3 PARAMETER: ", param)
+		elif(source in [1,2]):
+			if(f in self._FUNC2 and source2 in [1,2]):
+				self.write("MEAS:{} (@{},@{})".format(f, source, source2))
+			elif(f in self._FUNC1):
+				if(param == None):
+					self.write("MEAS:{} (@{})".format(f, param, source))
+				elif(param > 0 and param < 100):
+					self.write("MEAS:{} {},(@{})".format(f, param, source))
+				elif(param):
+					self.write("MEAS:{} {},(@{})".format(f, param, source))
+				else:
+					return print("INVALID FUNC1 PARAMETER: ", param)
+			elif(f in self._FUNC):
+				self.write("MEAS:{} (@{})".format(f, source))
+			else:
+				return print("INVALID FUNCTION: ", f)
 		else:
-			try:
-				self._range = float(range)
-			except:
-				raise Exception('range argument is type (%s) must be float type or valid keyword (%s)'%(type(range),self.VALID_ARGS))
-
-
-	def set_averaging(self, enable, number_of_averages=None):
-		scpi_parameter = 'ON' if enable else 'OFF'
-		self.write(':SENS:AVER ' + scpi_parameter)
-
-		if not number_of_averages == None:
-			self.write(':SENS:AVER:COUN ' + str(number_of_averages))
-
-	def restart_averaging(self):
-		self.write(':SENS:AVER:CLE')
-
-	def get_sweep_time(self):
-		return float(self.ask(':SENS1:SWE:TIME?'))
-
-	def get_bandwidth_measure(self, dB_down=None):
-		self.write(':CALC1:MARK1:BWID ON')
-		if not dB_down == None:
-			self.write(':CALC1:MARK1:BWID:THR ' + str(dB_down))
-		return [float(i) for i in (self.ask(':CALC1:MARK:BWID:DATA?').split(','))]
-
-	def peak_search(self):
-		''' Enable peak search, find peak, and return X and Y positions'''
-		self.write(':CALC:MARK1:FUNC:TYPE PEAK')
-		self.write(':CALC:MARK1:FUNC:EXEC')
-		return float(self.ask(':CALC:MARK1:X?')), float(self.ask(':CALC:MARK1:Y?').split(',')[0])
-
-	def max_search(self, marker=None):
-		''' Enable max search, find max, and return X and Y positions'''
-		if marker == None:
-			marker = 1
-
-		marker_text = 'MARK' + str(marker)
-
-		self.write(':CALC:' + marker_text + ' ON')
-		self.write(':CALC:' + marker_text + ':FUNC:TYPE MAX')
-		self.write(':CALC:' + marker_text + ':FUNC:EXEC')
-
-		return (float(self.ask(':CALC:' + marker_text + ':X?')),
-				float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0]))
-
-	def min_search(self, marker=None):
-		'''Enable min search, find min, and return X and Y positions'''
-		if marker == None:
-			marker = 1
-
-		marker_text = 'MARK' + str(marker)
-
-		self.write(':CALC:' + marker_text + ' ON')
-		self.write(':CALC:' + marker_text + ':FUNC:TYPE MIN')
-		self.write(':CALC:' + marker_text + ':FUNC:EXEC')
-
-		return (float(self.ask(':CALC:' + marker_text + ':X?')),
-				float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0]))
-
-
-	def get_trace(self):
-		freqList = [float(i) for i in self.ask(':SENS1:FREQ:DATA?').split(',')]
-		amplList = [float(i) for i in self.ask(':CALC1:DATA:FDAT?').split(',')[::2]]
-		return np.transpose([freqList, amplList])
-
-	def set_marker(self, freq, marker=None):
-		if marker == None:
-			marker = 1
-
-		marker_text = 'MARK' + str(marker)
-
-		self.write(':CALC:' + marker_text + ':X ' + str(freq))
-		return float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0])
-
-	def get_marker_value(self, marker=None):
-		if marker == None:
-			marker = 1
-
-		marker_text = 'MARK' + str(marker)
-
-		return float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0])
-
-	def save_trace(self, filename):
-		np.savetxt(filename, self.get_trace(), delimiter='\t')
-		return 0
+			return print("INVALID CHANNEL: ", source)
+		self._func = f
+	
+	def meas(self, f = None, param = None, source = 1, source2 = None):
+		if(f == None):
+			return self.query("CONF?")
+		elif(f in self._FUNC or f in self._FUNC1 or f in self._FUNC2 or f in self._FUNC3):
+			if(source in [1,2,3]):
+				self.func(f, param, source, source2)
+				return self.read()
+			else:
+				print("INVALID CHANNEL: ", source)
+		else:
+			print("INVALID FUNCTION: ", f)
+	
+	def read(self, f = None):
+		if(f == None):
+			return self.query("READ?")
+		elif(f in self._FUNC):
+			return self.query("READ:{}?".format(f))
+			self._func = f
+		else:
+			print("INVALID FUNCTION: ", f)
+	
+	def mode(self, m = None, reset = None):
+		if(m == None):
+			return self.query("INIT:CONT?")
+		elif(m in self._ONOFF):
+			if(reset):
+				return self.query("INIT:AUTO ON")
+			else:
+				self.write("INIT:AUTO OFF")
+			self.write("INIT:CONT {}".format(m))
+		else:
+			print("INVALID MODE: ", m)

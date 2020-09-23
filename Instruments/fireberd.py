@@ -4,8 +4,8 @@ import urllib.request
 
 class FireBERD(Instrument):
 	models = ["FB"]
-	def __init__(self, name, adapter, enableSCPI=True, **kwargs):
-		super(FireBERD, self).__init__(name, adapter, enableSCPI, **kwargs)
+	def __init__(self, name, adapter, **kwargs):
+		super(FireBERD, self).__init__(name, adapter, **kwargs)
 		try:
 			self.dev
 		except:
