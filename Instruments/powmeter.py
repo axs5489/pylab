@@ -106,7 +106,7 @@ class PMChannel(Channel):
 	#   MIN      DEF       MAX        UNITS
 	#  -150 << ( -90 ) << +200    W / % / dBm / dB
 		if(lim == None):
-			return self.query("CALC{}:LIM:LOW?".format(self.chnum))
+			return self.value("CALC{}:LIM:LOW?".format(self.chnum))
 		elif(isinstance(lim, int) or isinstance(lim, float)):
 			self.write("CALC{}:LIM:LOW {}".format(self.chnum, lim))
 		else:
@@ -116,7 +116,7 @@ class PMChannel(Channel):
 	#   MIN      DEF       MAX        UNITS
 	#  -150 << ( -90 ) << +200    W / % / dBm / dB
 		if(lim == None):
-			return self.query("CALC{}:LIM:UPP?".format(self.chnum))
+			return self.value("CALC{}:LIM:UPP?".format(self.chnum))
 		elif(isinstance(lim, int) or isinstance(lim, float)):
 			self.write("CALC{}:LIM:UPP {}".format(self.chnum, lim))
 		else:
