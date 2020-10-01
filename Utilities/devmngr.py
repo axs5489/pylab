@@ -21,7 +21,7 @@ from Instruments.rfswitch import rfSW
 from Instruments.scope import Oscilloscope
 from Instruments.specan import SpecAnalyzer
 import Radio.radio
-from Radio.radio import *
+from Radio.radio import Console, Channel, Radio
 import Utilities.win
 import Utilities.config
 import time

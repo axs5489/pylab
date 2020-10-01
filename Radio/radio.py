@@ -18,6 +18,7 @@ class Console(Serial):
 	LOAD = 'LOAD'
 	NORM = 'NORM'
 	PROGRAM = 'PRGM'
+	_ASCII = [F3, NORM, LOAD, INSTALL, PROGRAM]
 	
 	def __init__(self, name=None, comport=None, filepath=None, debugOn=False, debugTime=False):
 		""" Console Constructor
@@ -40,8 +41,9 @@ class Console(Serial):
 		
 		try:
 			super().__init__(port=comport,baudrate=115200,timeout=5)
-		except SerialException:
-			print(comport, " already open")
+		except SerialException as se:
+			print("UNABLE TO OPEN: ", comport)
+			print(se)
 		
 		#Open log file, if requested
 		self.logenabled = False
@@ -61,6 +63,24 @@ class Console(Serial):
 	def __del__(self):
 		self.close()
 	
+	def read(self, n=1):
+		return super().read(n).decode()
+	
+	def readline(self, pub=False):
+		line = []
+		for c in self.read():
+			line.append(c)
+			if c == '\n' or self.inWaiting() == 0:
+				return line
+	
+	def readlines(self, pub=False):
+		i = 0
+		lines = []
+		while self.inWaiting() > 0:
+			lines[i] = self.readline(pub)
+			i += 1
+		return lines
+	
 	def readBuffer(self, pub=False):
 		if(super().isOpen()) :
 			buf = ''
@@ -70,11 +90,17 @@ class Console(Serial):
 			return buf
 		return False
 	
-	def sendCommand(self, cmd):
-		return self.write((cmd + '\n').encode('utf-8'))
+	def write(self, cmd):
+		super().write(cmd.encode('utf-8'))
 	
-	def send_and_wait(self, cmd, prompt=False):
-		self.sendCommand(cmd)
+	def send(self, cmd):
+		if(cmd[-1] is not '\n'):
+			cmd += '\n'
+		self.write(cmd)
+		super.flush()
+	
+	def send_and_wait(self, cmd, prompt=None):
+		self.send(cmd)
 		
 		buffer = ""
 		found = 0
@@ -87,25 +113,26 @@ class Console(Serial):
 		self.postMessage(buffer)
 		return found
 	
-	def validateASCII(response):
-		prompts = ["F3", "NORM", "LOAD", "INST", "PRGM"]
-		for p in prompts:
+	def validatePrompt(self, response, ASCII = False):
+		for p in self._ASCII:
 			if(response.find(p)):
 				if self.debugOn : print("Found {}".format(p))
 				return True
+		if (not ASCII and response.find('#')):
+			return True
 		return False
 
-	def validatePrompt(response):
-		return validateASCII(response) or response.find('#')
+	# def validatePrompt(self, response):
+		# return validateASCII(response) or response.find('#')
 		
-	def validPrompt(self, blocking=False):
+	def validPrompt(self, blocking=False, ASCII = False):
 		buffer = ""
 		found = 0
 		while(blocking and not found):
-			self.sendCommand('\n')
+			self.send('\n')
 			output = self.readBuffer()
 			buffer += output
-			if(win.validatePrompt(output)) :
+			if(win.validatePrompt(output, ASCII)) :
 				found = 1
 		
 		self.publish(buffer)
@@ -122,7 +149,7 @@ class Console(Serial):
 		timeout = 10
 		# Let's grab a list of all active drive letters
 		drivebits = Utilities.win.getDrives()
-		self.sendCommand('startusb', '#')
+		self.send('startusb', '#')
 		startTime = time.time()
 		while time.time()-startTime < timeout:
 			time.sleep(2)
@@ -141,7 +168,9 @@ class Console(Serial):
 
 class Channel():
 	def __init__(self, name=None, redcomport=None, blkcomport=None, filepath=None, debugOn=False, debugTime=False):
-		pass
+		self._name = name
+		self.red = Console(redcomport)
+		self.blk = Console(blkcomport)
 	
 	def close():
 		pass
@@ -151,7 +180,17 @@ class Channel():
 
 class Radio():
 	def __init__(self, name=None, comport=None, filepath=None, debugOn=False, debugTime=False):
-		pass
+		self._name = name
+		if isinstance(comport,list):
+			self.rcp = Console(name + " RCP", comport[0])
+			self.ch1 = Channel(name + " CH1", comport[1], comport[2])
+			self.ch2 = Channel(name + " CH2", comport[3], comport[4])
+		elif isinstance(comport,dict):
+			self.rcp = Console(name + " RCP", comport["RCP"])
+			self.ch1 = Channel(name + " CH1", comport["C1R"], comport["C1B"])
+			self.ch2 = Channel(name + " CH2", comport["C2R"], comport["C2B"])
+		else:
+			print("RADIO ERROR! Give me something to work with")
 		
 	def close():
 		pass
@@ -161,4 +200,4 @@ class Radio():
 
 
 if __name__ == "__main__":
-	testcon = console("test",'COM1','C:\\Users\\asasson\\Documents\\Logs\\dbg_console.txt',True,False)
+	testcon = Console("test",'COM6','C:\\Users\\asasson\\Documents\\Logs\\dbg_console.txt',True,False)

@@ -116,27 +116,6 @@ class BaseInstrument():
 		""" Resets the instrument. """
 		self.write("*RST")
 
-	def shutdown(self):
-		"""Brings the instrument to a safe and stable state"""
-		self.isShutdown = True
-		print("Shutting down %s" % self._name)
-
-	def selftest(self):
-		"""Trigger self-test"""
-		return self.ask("*TST?")
-
-	def status(self):
-		"""Trigger self-test"""
-		return self.ask("*STAT")
-
-	def display(self):
-		"""Return display setting"""
-		return self.ask("SYST:DISP?")
-
-	def version(self):
-		"""Return SCPI version"""
-		return self.ask("SYST:VERS?")
-
 	@staticmethod
 	def control(get_command, set_command, docs,
 				validator=lambda v, vs: v, values=(), map_values=False,
@@ -388,6 +367,34 @@ class Instrument(BaseInstrument):
 		while(self.check_error()):
 			self.clear()
 		if(reset) : self.reset()
+
+	def recall(self, state=None):
+		"""Recall a saved state."""
+		self.write("*RCL " + str(state))
+
+	def save(self, state=None):
+		"""Saves a state."""
+		self.write("*SAV " + str(state))
+
+	def selftest(self):
+		"""Trigger self-test"""
+		return self.ask("*TST?")
+
+	def shutdown(self):
+		"""Brings the instrument to a safe and stable state"""
+		self.isShutdown = True
+		print("Shutting down %s" % self._name)
+
+	def status(self):
+		return self.ask("*STAT")
+
+	def display(self):
+		"""Return display setting"""
+		return self.ask("SYST:DISP?")
+
+	def version(self):
+		"""Return SCPI version"""
+		return self.ask("SYST:VERS?")
 
 	def wait(self):
 		return self.write("*WAI")

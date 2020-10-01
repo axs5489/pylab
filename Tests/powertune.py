@@ -7,7 +7,7 @@ Created on Thu Feb 12 12:29:52 2020
 
 import sys
 sys.path.append('H:\\Python\\l3hlib')
-import Radio.radio
+from Radio.radio import Console, Channel, Radio
 from Tests.test import Test
 import time
 import visa
@@ -15,32 +15,30 @@ import Utilities.devmngr
 
 
 class PowerTune(Test):
-	def __init__(devmng = None, logfile=None, debugOn = False):
-		super(PowerTune,self).__init__(dm=devmng)
+	modes = ['NB', 'WB', 'MUOS']
+	
+	def __init__(self, pm, red, blk, logfile=None):
+		super(PowerTune,self).__init__()
 		self._name = "PowerTune"
+		self._pm = pm
+		self._red = red
+		self._blk = blk
 		self.config()
 		self.configPower()
 	
-	def config(tuneNB=True, tuneWB=True, tuneMUOS=True, MUOSreissue=True, timeout=200):
-		self._tuneNB = tuneNB
-		self._tuneWB = tuneWB
-		self._tuneMUOS = tuneMUOS
-		self._MUOSreissue = MUOSreissue
-		self._timeout = 200
-	
-	def configPower(fullpower=43, offset=0.14, tol=0.1, attenutation=40):
-		self._fp = fullpower
-		self._powoffset = offset
-		self._tol = tol
-		self._atten = attenuation
-	
 	def close(self):
 		super(PowerTune,self).close()
+		self._name = None
+		self._pm = None
+		self._red = None
+		self._blk = None
+		
 		self._tuneNB = None
 		self._tuneWB = None
 		self._tuneMUOS = None
 		self._MUOSreissue = None
-		
+		self._timeout = None
+	
 		self._fp = None
 		self._powoffset = None
 		self._tol = None
@@ -49,13 +47,36 @@ class PowerTune(Test):
 	def __del__(self):
 		self.close()
 	
-	def fetchPower(pm, debugOn = False):
-		if debugOn : print("*** FETCH ****")
-		pwr = float(power_meter.query("FETC?"))
-		if debugOn : print("POWER: ", pwr)
-		return pwr
+	def config(self, tuneNB=True, tuneWB=True, tuneMUOS=True, MUOSreissue=True, timeout=20):
+		self._tuneNB = tuneNB
+		self._tuneWB = tuneWB
+		self._tuneMUOS = tuneMUOS
+		self._MUOSreissue = MUOSreissue
+		self._timeout = timeout
 	
-	def fetchStablePower(pm, delay = 1, debugOn = False):
+	def configPower(self, fullpower=43, offset=0.14, tol=0.1, attenuation=40):
+		self._fp = fullpower
+		self._powoffset = offset
+		self._tol = tol
+		self._atten = attenuation
+	
+	def main(self):
+		while():
+			red.validPrompt()
+			blk.validPrompt()
+		self._red.send("ascii")
+		if(self._tuneNB):
+			self._red.send("vulos pre act freq 300")
+			self._red.send("vulos pre act trafficmode data")
+			self.tuneCutPower("NB")
+		if(self._tuneWB):
+			self.tuneCutPower("WB")
+		if(self._tuneMUOS):
+			self.tuneCutPower("MUOS")
+		
+		return self._red.send("vulos pre act trafficmode datavoice")
+	
+	def fetchStablePower(self, delay = 1, debugOn = False):
 		stable = 0
 		maxtol = 0.1
 		attempts = 0
@@ -63,28 +84,31 @@ class PowerTune(Test):
 		lastpwr = float(power_meter.query("FETC?"))
 		while(attempts < maxattempts) :
 			time.sleep(delay)
-			pwr = float(power_meter.query("FETC?"))
+			pwr = float(self._pm.query("FETC?"))
 			dev = abs(pwr - lastpwr)/pwr
 			if(dev < maxtol) :
 				stable += 1
 			if(stable == 5) : return pwr
 			lastpwr = pwr
 	
-	def tuneCutPower(pm, rcon, bcon, mode, starttune, cutpower, debugOn = False):
+	def tuneCutPower(self, mode, starttune, cutpower, debugOn = False):
 		if debugOn : print("*** {} {} ****".format(mode, cutpower))
 		untuned = 1
 		tune = starttune
 		while untuned:
 			if(mode == "NB") :
-				red.sendCommand("radio txpoweroffset NB {} POWER {}".format(tune, cutpower + 3))
+				self._red.send("radio txpoweroffset NB {} POWER {}".format(tune, cutpower + 3))
 			elif(mode == "WB") :
-				red.sendCommand("radio txpoweroffset WB {} POWER {}".format(tune, cutpower + 3))
+				self._red.send("radio txpoweroffset WB {} POWER {}".format(tune, cutpower + 3))
 			elif(mode == "MUOS") :
-				red.sendCommand("radio txpoweroffset MUOS {} POWER {}".format(tune, cutpower + 3))
+				self._red.send("radio txpoweroffset MUOS {} POWER {}".format(tune, cutpower + 3))
 			else:
 				print("Invalid Mode")
-			power = fetchPower(pm)
+			power = self._pm.power()
+	
+	def spotCheck(self, freq = 30, cutpower = 0):
 		pass
+
 
 MUOSreissue = True
 max_attempts = 200
@@ -97,8 +121,8 @@ if __name__ == "__main__":
 	logfile.flush()
 	
 	try:
-		red = console.Console('RED', 'COM6')
-		blk = console.Console('BLK', 'COM7')
+		red = Console('RED', 'COM6')
+		blk = Console('BLK', 'COM7')
 	except:
 		print("COMMS already open")
 		exit(0)

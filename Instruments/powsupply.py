@@ -19,15 +19,6 @@ class PS(Instrument):
 # 	meas_voltage = Instrument.measurement("MEAS:VOLT?", "DC voltage, in Volts")
 # 	current = Instrument.control("CURR %d", "CURR?", "DC current, in Amps")
 # 	meas_current = Instrument.measurement("MEAS:CURR?", "DC current, in Amps")
-	
-	def set_frequency_start_stop(self, start, stop):
-		self.write(':SENS1:FREQ:STAR ' + str(start))
-		self.write(':SENS1:FREQ:STOP ' + str(stop))
-
-	def set_frequency_center_span(self, center, span=None):
-		self.write('SENS1:FREQ:CENT ' + str(center))
-		if not span == None:
-			self.write('SENS1:FREQ:SPAN ' + str(span))
 
 	def cmd_mode(self, mode=None):
 		if mode == None:
@@ -44,7 +35,7 @@ class PS(Instrument):
 		if output == None:
 			return self.ask('OUTP:STAT?')
 		elif output in self._ONOFF:
-			self.write('OUTP:STAT ' + output)
+			self.write('OUTP:STAT ' + str(output))
 		else:
 			print("Output state (" + output + ") not in " + str(self._ONOFF))
 
