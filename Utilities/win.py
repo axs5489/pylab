@@ -14,6 +14,7 @@ from serial.serialutil import SerialException
 import shutil
 import time
 import win32api
+import win32com.client
 
 
 def timeExpired(startTime, numSec=45):
@@ -98,18 +99,18 @@ def getDrives():
 	return list
 
 def getDriveVolumeName(driveLetter):
-	""" Returns the volume name for a given drive letter, 'E://' """
-	volumeNameBuffer = ctypes.create_unicode_buffer(1024)
-	filesystemNameBuffer = ctypes.create_unicode_buffer(1024)
-	serial = None
-	max_component_len = None
-	file_system_flags = None
-	rc = ctypes.windll.kernel32.GetVolumeInformationW(ctypes.c_wchar_p(driveLetter),
-		volumeNameBuffer, ctypes.sizeof(volumeNameBuffer),
-		serial, max_component_len, file_system_flags,
-		filesystemNameBuffer, ctypes.sizeof(filesystemNameBuffer)
-	)
-	return volumeNameBuffer
+	""" Returns USB Drive Name by Letter ('D:\\') """
+	objWMIService = win32com.client.Dispatch("WbemScripting.SWbemLocator")
+	objSWbemServices = objWMIService.ConnectServer(".","root\cimv2")
+	
+	LogicalDisk_DeviceID = driveLetter[0:driveLetter.find('\\')]
+	#print(LogicalDisk_DeviceID)
+	
+	# 4. Win32_LogicalDisk
+	colItems = objSWbemServices.ExecQuery("SELECT * from Win32_LogicalDisk WHERE DeviceID=\"" + LogicalDisk_DeviceID + "\"")
+	#print('LogicalDisk VolumeName:', colItems[0].VolumeName)
+	#print(colItems[0].VolumeName, '(' + LogicalDisk_DeviceID + ')')
+	return colItems[0].VolumeName
 
 def findDrive(search, timeout=20):
 	""" Basic search of drives by name """
