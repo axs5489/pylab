@@ -7,11 +7,14 @@ Created on Thu Feb 12 12:29:52 2020
 
 import sys
 sys.path.append('H:\\Python\\l3hlib')
+from Adapters.visa import VISAAdapter
+from Instruments.instrument import splitResourceID
+from Instruments.powsupply import PS
 from Radio.radio import Console, Channel, Radio
 from Tests.test import Test
+import Utilities.Station
 import time
 import visa
-import Utilities.devmngr
 
 
 class PowerTune(Test):
@@ -27,7 +30,6 @@ class PowerTune(Test):
 		self.configPower()
 	
 	def close(self):
-		super(PowerTune,self).close()
 		self._name = None
 		self._pm = None
 		self._red = None
@@ -43,6 +45,7 @@ class PowerTune(Test):
 		self._powoffset = None
 		self._tol = None
 		self._atten = None
+		super(PowerTune,self).close()
 	
 	def __del__(self):
 		self.close()
@@ -60,28 +63,29 @@ class PowerTune(Test):
 		self._tol = tol
 		self._atten = attenuation
 	
-	def main(self):
-		while():
-			red.validPrompt()
-			blk.validPrompt()
-		self._red.send("ascii")
-		if(self._tuneNB):
-			self._red.send("vulos pre act freq 300")
-			self._red.send("vulos pre act trafficmode data")
-			self.tuneCutPower("NB")
-		if(self._tuneWB):
-			self.tuneCutPower("WB")
-		if(self._tuneMUOS):
-			self.tuneCutPower("MUOS")
+	def configWBTEST(self, mode="WB", param=[3e7, "tx", "conttone", 1, 0]):
+		self._blk.send("debug seq verbose off")
+		if mode=="MUOS" : self._blk.send("debug seq extra6 8 lb")
+		debugcmds = ["debug seq freq {}", 
+					"debug seq direction {}", 
+					"debug seq testtype conttone", 
+					"debug seq datarate 1", 
+					"debug seq cutpower 0", 
+					"debug seq modemstart"]
+		for i,c in debugcmds:
+			self._blk.send((c + " lb" if mode=="MUOS" else "").format(param[i]))
+			time.sleep(0.1)
+			self._blk.flush()
 		
-		return self._red.send("vulos pre act trafficmode datavoice")
+		self._blk.flush()
+		self._blk.validPrompt()
 	
 	def fetchStablePower(self, delay = 1, debugOn = False):
 		stable = 0
 		maxtol = 0.1
 		attempts = 0
 		maxattempts = 200
-		lastpwr = float(power_meter.query("FETC?"))
+		lastpwr = float(self._pm.query("FETC?"))
 		while(attempts < maxattempts) :
 			time.sleep(delay)
 			pwr = float(self._pm.query("FETC?"))
@@ -91,8 +95,69 @@ class PowerTune(Test):
 			if(stable == 5) : return pwr
 			lastpwr = pwr
 	
-	def tuneCutPower(self, mode, starttune, cutpower, debugOn = False):
-		if debugOn : print("*** {} {} ****".format(mode, cutpower))
+	def main(self):
+		while():
+			red.validPrompt()
+			blk.validPrompt()
+		self._red.send("ascii")
+		self.tunetables = ["","",""]
+		tune = 20
+		if(self._tuneNB):
+			cutpwr = 0
+			self._red.send("power user 0")
+			self._red.send("vulos pre act freq 300")
+			self._red.send("vulos pre act trafficmode data")
+			self._red.flush()
+			self._red.send("radio txpoweroffet nb")
+			self.tunetables[0] = self._red.readlines()
+			print(self.tunetables[0])
+			self._red.send("bert start")
+			while cutpwr < 11:
+				self._red.send("power user {}".format(cutpwr))
+				time.sleep(1)
+				tune = self.tune("NB", tune, cutpwr)
+				cutpwr += 1
+			self._red.send("bert stop")
+			self._red.send("radio txpoweroffet save")
+		if(self._tuneWB):
+			cutpwr = 0
+			self._red.flush()
+			self._red.send("radio txpoweroffet wb")
+			self.tunetables[1] = self._red.readlines()
+			self._red.send("bit wide eng")
+			time.sleep(10)
+			self.configWBTEST()
+			while cutpwr < 20:
+				self._blk.send("debug seq cutpower {}".format(cutpwr))
+				time.sleep(1)
+				self.tune("WB", tune, cutpwr)
+				cutpwr += 1
+			self._red.send("bit wide stop")
+			self._red.send("radio txpoweroffet save")
+		if(self._tuneMUOS):
+			cutpwr = 0
+			self._red.flush()
+			self._red.send("radio txpoweroffet muos")
+			self.tunetables[2] = self._red.readlines()
+			self._red.send("bit wide eng")
+			time.sleep(10)
+			self.configWBTEST("MUOS")
+			while cutpwr < 46:
+				self._blk.send("debug seq cutpower {} lb".format((cutpwr + 3)))
+				time.sleep(1)
+				self.tune("MUOS", tune, cutpwr)
+				cutpwr += 1
+			self._red.send("bit wide stop")
+			self._red.send("radio txpoweroffet save")
+		
+		return self._red.send("vulos pre act trafficmode datavoice")
+	
+	def tune(self, mode, starttune, cutpower):
+		print("*** {} , {} starting with value {}****".format(mode, cutpower, starttune))
+		target = self._fp - cutpower - 3
+		if(mode == "MUOS" and cutpower == 0):
+			target = 39
+		print("TARGET: ", target)
 		untuned = 1
 		tune = starttune
 		while untuned:
@@ -105,6 +170,8 @@ class PowerTune(Test):
 			else:
 				print("Invalid Mode")
 			power = self._pm.power()
+		print(target, power)
+		return power
 	
 	def spotCheck(self, freq = 30, cutpower = 0):
 		pass
@@ -119,109 +186,43 @@ if __name__ == "__main__":
 	logfile = open("C:\\Users\\asasson\\Documents\\Logs\\ptune.txt","w")
 	logfile.write("Log file\n")
 	logfile.flush()
-	
+	rm = visa.ResourceManager()
 	try:
-		red = Console('RED', 'COM6')
-		blk = Console('BLK', 'COM7')
-	except:
-		print("COMMS already open")
-		exit(0)
-		
-	try:
-		rm = visa.ResourceManager()
+		addr_ps = "GPIB0::6::INSTR"
 		print('Available Instruments: \n\n', rm.list_resources(),'\n\n')
-		power_meter = rm.open_resource('GPIB0::14::INSTR')
+		r = rm.open_resource(addr_ps)
+		mm = splitResourceID(r.query('*idn?')[:-1])
+		print(mm)
+		adptr = VISAAdapter("TestAdapter", r)
+		ps =  PS(mm, adptr)
+		ps.output_state(0)
+		ps.voltage(26)
+		time.sleep(1)
+		ps.output_state(1)
+		
+		pm = rm.open_resource('GPIB0::14::INSTR')
 	except:
 		print("GPIB FAILURE")
 		exit(0)
-	
-	attempts = 0
-	num_fail = 0
-	num_boot_fail = 0
-	state = -1
-	cutpwr = 0
-	inittune = 0
-	rcpboot = False
-	redboot = False
-	timeoff = time.perf_counter()
-	lasttime = time.perf_counter()
-	while (red.isOpen() and (attempts < max_attempts) and (state > -2)):
-		if(state == -1) :
-			attempts += 1
-			logfile.write("****** Attempts: " + str(attempts))
-			red.validPrompt()
-			blk.validPrompt()
-			red.sendCommand("ascii")
-			red.sendCommand("vulos pre act freq 300")
-			# red.sendCommand("radio txpoweroffset")
-		elif(state == 0 and tuneNB) :
-			if debugOn : print("********** Initiating NB TUNE **********")
-			if(cutpwr < 11) :
-				red.sendCommand("power user {}".format(cutpwr))
-				red.validPrompt()
-				inittune = tuneCutPower(power_meter, red, blk, "NB", inittune, cutpwr)
-				cutpwr +=1
-			else:
-				state = 3
-				red.sendCommand("radio txpoweroffset save")
-		elif(state == 1) :
-			cutpwr = 0
-			red.sendCommand("bit wide eng")
-			blk.validPrompt()
-			if(tuneWB) :
-				if debugOn : print("********** Initiating WB TUNE **********")
-				blk.sendCommand("debug seq verbose off")
-				blk.sendCommand("debug seq freq 300000000")
-				blk.sendCommand("debug seq direction tx")
-				blk.sendCommand("debug seq testtype conttone")
-				blk.sendCommand("debug seq datarate 1")
-				
-				state = 2
-			else:
-				if debugOn : print("********** Skipping WB TUNE **********")
-				state = 3
-		elif(state == 2 and tuneWB) :
-			if debugOn : print("*************** WB TUNE ***************")
-			if(cutpwr < 20) :
-				blk.sendCommand("debug seq cutpower {}".format(cutpwr))
-				blk.sendCommand("debug seq modemstart lb")
-				tuneCutPower(power_meter, red, blk, "WB", inittune, cutpwr)
-				cutpwr += 1
-			else:
-				state = 3
-				blk.sendCommand("debug seq modemstop")
-				red.sendCommand("radio txpoweroffset save")
-		elif(state == 3) :
-			if(tuneMUOS) :
-				if debugOn : print("********* Initiating MUOS TUNE *********")
-				if(not tuneWB) : red.sendCommand("bit wide eng")
-				blk.validPrompt()
-				blk.sendCommand("debug seq verbose off")
-				blk.sendCommand("debug seq freq 300000000 lb")
-				blk.sendCommand("debug seq direction tx lb")
-				blk.sendCommand("debug seq testtype conttone lb")
-				blk.sendCommand("debug seq datarate 1 lb")
-				blk.sendCommand("debug seq extra6 8 lb")
-				cutpwr = 3
-				state = 4
-			else:
-				if debugOn : print("********* Skipping MUOS TUNE *********")
-				state = -2
-		elif(state == 4 and tuneMUOS) :
-			if debugOn : print("************** MUOS TUNE **************")
-			if(cutpwr < 50) :
-				blk.sendCommand("debug seq cutpower {} lb".format(cutpwr))
-				if(MUOSreissue) : blk.sendCommand("debug seq modemstart lb")
-				tuneCutPower(power_meter, red, blk, "MUOS", inittune, cutpwr)
-				cutpwr += 1
-			else:
-				state = -2
-				blk.sendCommand("debug seq modemstop lb")
-				red.sendCommand("radio txpoweroffset save")
+		print("Power Supply Error")
 	
 	try:
-		red.close()
-		blk.close()
+		print(reduut)
+	except:
+		reduut = Console('RED', 'COM6')
+	
+	try:
+		print(blkuut)
+	except:
+		blkuut = Console('BLK', 'COM7')
+	
+	tune = [True, True, True]
+	
+	test = PowerTune(pm, reduut, blkuut)
+	tune.main()
+	
+	try:
+		reduut.close()
+		blkuut.close()
 	except:
 		print("whoops")
-	

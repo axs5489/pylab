@@ -17,14 +17,16 @@ class TestAborted(Exception):
 	
 class Test():
 	def __init__(self, dm=None, filename=None, debugOn=False):
-	""" Generic Test Constructor
-			dm: DevMNGR object
-			filename: log file name ('.txt') """
+		""" Generic Test Constructor
+		dm: DevMNGR object
+		filename: log file name ('.txt')"""
 		self._debugOn = debugOn
 		self._name = "GenericTest"
-		if(devmng == None) :
-			self._dm = Utilities.devmngr.DevMNGR(logfile=filename)
+		if(dm == True) :
+			self._dm = Utilities.devmngr.Station(filename, debugOn)
 			self._dm.autoinit()
+		else:
+			self._dm = None
 	
 	def close(self):
 		self._dm = None
@@ -38,7 +40,7 @@ class Test():
 		self.close()
 	
 	def GetRadioName(self, radio):
-	""" Gets a "nice" name from a given Radio class. """
+		""" Gets a "nice" name from a given Radio class. """
 		radio_name = 'unassigned'
 		if type(radio).__name__ == 'F3MP_Radio':
 			radio_name = '117G'
@@ -57,13 +59,12 @@ class Test():
 		return radio_name
 	
 	def CheckForTestAbort(raise_exception=True):
-	""" Checks for a 'q' keypress, and raises the TestAborted Exception if so.
-	"""
+		""" Checks for a 'q' keypress, and raises the TestAborted Exception if so."""
 		if msvcrt.kbhit():
 			if msvcrt.getch() == 'q':
 				if raise_exception:
 					raise TestAborted('Aborting...')
 				else:
-					print 'Aborting...'
+					print('Aborting...')
 					return True
 		return False
