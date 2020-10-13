@@ -488,6 +488,19 @@ class ChannelizedInstrument(Instrument):
 			print("Invalid index {} for Instrument Channel {}".format(ind, ch))
 		
 	
+class HPIBInstrument(Instrument):
+	""" Class for equipment with Math capabilities. """
+
+	def __init__(self, name, adapter, **kwargs):
+		super(MathInstrument,self).__init__(name, adapter, **kwargs)
+
+	def id(self):
+		""" Override VisaDevice base class implementation since this instrument does not have the standard '*IDN?' command """
+		return self._id
+	
+	def reset(self):
+		self.write('CL')
+	
 class MathInstrument(Instrument):
 	""" Class for equipment with Math capabilities. """
 
