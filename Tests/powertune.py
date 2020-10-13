@@ -326,7 +326,7 @@ if __name__ == "__main__":
 			
 			tune = PowerTune(pm, ch)
 			#			NB     WB	MUOS, reissue, timeout
-			tune.config(False, False, True, True, 10)
+			tune.config(True, True, False, True, 10)	#MUOS does not work yet!
 			tune._debug = True
 			print("Configured and Running PowerTune")
 			tune.main()
