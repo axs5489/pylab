@@ -7,22 +7,22 @@ Created on Fri Jun 14 14:40:09 2019
 
 import Utilities.win
 from Utilities.SerialPort import SerialPort
+#from WF import Waveform, VULOS
 import re
 from serial import Serial
 import time
-import threading
-import Queue
 
 
 class Console():
 	# Console Modes
 	CONSOLE = 'CONSOLE'
+	BIT = "BIT"
 	F3 = 'F3' # No WFs Active
 	INSTALL = 'INST'
 	LOAD = 'LOAD'
 	NORM = 'NORM'
 	PROGRAM = 'PRGM'
-	_ASCII = [F3, NORM, LOAD, INSTALL, PROGRAM]
+	_ASCII = [">", F3, NORM, LOAD, INSTALL, PROGRAM]
 	
 	def __init__(self, name=None, comport=None, baud=115200, asyncr=False, filepath=None, debugOn=False):
 		""" Console Constructor
@@ -42,13 +42,16 @@ class Console():
 		
 		try:
 			if(comport == None) :
+				print("Let's find a COM Port")
 				comport = Utilities.win.findRadioPort()
 			if(comport == -1):
 				print("We screwed up somewhere")
-			if(isinstance(comport, SerialPort)):
+			elif(isinstance(comport, SerialPort)):
+				print("Using this SerialPort object")
 				self.handle = comport
-			if(isinstance(comport, str)):
-				self.handle = SerialPort(comport, baud)
+			elif(isinstance(comport, str)):
+				print("Starting new SerialPort")
+				self.handle = SerialPort(name, comport, baud)
 			else:
 				print("What is this?")
 		except Exception as se:
@@ -69,20 +72,25 @@ class Console():
 		self.lasttime = time.perf_counter()
 	
 	def close(self):
-		self.handle.close()
+		if self.isOpen():
+			self.handle.close()
 	
 	def __del__(self):
 		self.close()
 	
+	def isOpen(self):
+		if hasattr(self,'handle'):
+			return self.handle.handle.isOpen()
+	
 	def flush(self):
-		self.handle.flush()
+		return self.handle.flush()
 		
 	def readline(self, pub=False):
 		return self.handle.recv().strip()
 	
 	def readlines(self, pub=False):
 		lines = []
-		while self.inWaiting() > 0:
+		while self.handle.handle.inWaiting() > 0:
 			lines.append(self.readline(pub))
 			time.sleep(0.05)
 		return lines
@@ -99,23 +107,12 @@ class Console():
 		self.send(cmd)
 		return self.flush()
 	
-	def send_and_wait(self, cmd = "", prompt=""):
+	def send_and_wait(self, cmd = "", prompt="", timeout = 5, useRegex=False, caseSensitive=False):
 		self.send(cmd)
-		return self.waitFor(prompt)
-		
-# 		buffer = ""
-# 		found = 0
-# 		while(not prompt and not found):
-# 			output = self.readBuffer()
-# 			buffer += output
-# 			if(output.find(prompt) or buffer.find(prompt)) :
-# 				found = 1
-# 		
-# 		self.postMessage(buffer)
-# 		return found
+		return self.handle.waitFor(prompt, timeout, False, useRegex, caseSensitive)
 	
 	def waitFor(self, waitStr = "#"):
-		return self.handle.waitFor(waitStr)
+		return self.handle.waitFor(waitStr, 10, False)
 
 	# def validatePrompt(self, response):
 		# return validateASCII(response) or response.find('#')
@@ -149,16 +146,16 @@ class Channel():
 	def __init__(self, name=None, redcomport=None, blkcomport=None, filepath=None, debugOn=False, debugTime=False):
 		self._name = name
 		self.serial = {}
-		if(isinstance(redcomport, Console) or isinstance(redcomport, SerialPort)):
+		if(isinstance(redcomport, Console)):
 			self.red = redcomport
-		elif(isinstance(redcomport, str)):
+		elif(isinstance(redcomport, str) or isinstance(redcomport, SerialPort)):
 			self.red = Console(redcomport)
 		else:
 			print(name, " doesn't have a red side!")
 		
-		if(isinstance(blkcomport, Console) or isinstance(blkcomport, SerialPort)):
+		if(isinstance(blkcomport, Console)):
 			self.blk = blkcomport
-		elif(isinstance(blkcomport, str)):
+		elif(isinstance(blkcomport, str) or isinstance(blkcomport, SerialPort)):
 			self.blk = Console(blkcomport)
 		else:
 			print(name, " doesn't have a black side!")
@@ -170,13 +167,25 @@ class Channel():
 			self.serial['ASCII'] = self.red # ASCII uses the RED port
 	
 	def close(self):
-		if self.blk:
+		if self.blk.isOpen():
 			self.blk.close()
-		if self.red:
+		if self.red.isOpen():
 			self.red.close()
 	
 	def __del__(self):
 		self.close()
+	
+	def isOpen(self):
+		return self.red.isOpen() or self.blk.isOpen()
+
+	def clean(self):
+		self.ProgMode()
+		self.serial['ASCII'].send_and_wait('CLEAN', '>', 5)
+		return self.NormalMode()
+	
+	def flush(self):
+		return self.red.flush()
+		return self.blk.flush()
 
 	def _ConfigurePort(self,port):
 		""" """
@@ -201,7 +210,7 @@ class Channel():
 		if self.GetMode() != Console.PROGRAM:
 			self.AsciiMode()   #force ascii mode
 			try:
-				self.serial['ASCII'].send_and_wait('prog','PRGM>', 120)
+				self.serial['ASCII'].send_and_wait('prog','PRGM>', 30)
 			except:
 				print('Error Entering Program Mode')
 		return Console.PROGRAM
@@ -222,7 +231,7 @@ class Channel():
 				self.serial['ASCII'].send_and_wait('exit', '#', 5)
 			except:
 				print('Error Exiting ASCII Mode')
-		return Console.CONSOLE		
+		return Console.CONSOLE
 
 	############################################################################
 	
@@ -246,17 +255,17 @@ class Channel():
 			# if no RED port, always assume CONSOLE
 			self.currentMode = Console.CONSOLE
 			return self.currentMode
-							  
 		while True:
-			ret = self.red.send_and_wait('\n',"NORM>|F3>|PRGM>|INST>|LOAD>|#", 1, False, useRegex=True )
+			ret = self.red.send_and_wait('\n',"NORM>|F3>|PRGM>|INST>|LOAD>|#", 1, True, False)
 			if not ret: 
 				self.currentMode = None
-				raise Console.CommandFailed('Error Getting ASCII Mode')
+				print('Error Getting ASCII Mode')
 			elif ret.find('NORM>')>=0: self.currentMode = Console.NORM
 			elif ret.find('F3>')>=0: self.currentMode = Console.F3
 			elif ret.find('PRGM>')>=0: self.currentMode = Console.PROGRAM
 			elif ret.find('INST>')>=0: self.currentMode = Console.INSTALL
 			elif ret.find('LOAD>')>=0: self.currentMode = Console.LOAD
+			elif ret.find('BIT>')>=0: self.currentMode = Console.BIT
 			elif ret.find('#')==0 or ret.find('/tmp #')==0 or ret.find('~ #')==0 or "/tmp #" in ret: 
 				# make sure the # prompt is at the beginning of the line before deciding this is CONSOLE
 				self.currentMode = Console.CONSOLE
@@ -267,7 +276,6 @@ class Channel():
 				self.currentMode = None
 				raise Exception('Got Invalid ASCII Mode: %s'%ret)
 			break
-
 		return self.currentMode
 
 class Radio():
@@ -284,8 +292,15 @@ class Radio():
 		else:
 			print("RADIO ERROR! Give me something to work with")
 		
-	def close():
-		pass
+		self.channels = [self.rcp, self.ch1, self.ch2]
+		self.comports = [self.rcp, self.ch1.red, self.ch1.blk, self.ch2.red, self.ch2.blk]
+		
+	def close(self):
+		for p in self.comports:
+			if(p.isOpen()):
+				p.close()
+		print("Closing Radio " + self._name)
+		self._name = None
 	
 	def __del__(self):
 		self.close()

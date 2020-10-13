@@ -1,4 +1,4 @@
-from Instruments.instrument import Channel, Instrument
+from Instruments.instrument import Channel, Instrument, ChannelizedInstrument
 from Instruments.validators import strict_discrete_set
 
 class ScopeChannel(Channel):
@@ -117,7 +117,7 @@ class ScopeChannel(Channel):
 			raise ValueError("Invalid unit ('%s') provided to %s" % (
 							 self.parent, value))
 
-class Oscilloscope(Instrument):
+class Oscilloscope(ChannelizedInstrument):
 	models = ["SCP", "[DM]SO\d\d\d\d[ABCD]?"]
 	acq_modes = ["AVE", "ENV", "SAM", "PEAK", "HIR"]
 	def __init__(self, name, adapter, **kwargs):
@@ -127,6 +127,9 @@ class Oscilloscope(Instrument):
 		self.ch2 = ScopeChannel(self, 2)
 		self.ch3 = ScopeChannel(self, 3)
 		self.ch4 = ScopeChannel(self, 4)
+	
+	def close(self):
+		pass
 
 	acq_mode = Instrument.control('ACQ:MOD?"','FUNC "%s"', "FUNCTION",
 							strict_discrete_set, acq_modes)

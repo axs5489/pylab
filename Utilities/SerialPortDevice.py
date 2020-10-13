@@ -137,7 +137,7 @@ class SerialPortDevice(object):
 				tx_term: tx terminator string
 				echos: True if this port echos Tx messages back, False if it does not
 		"""
-		if not name:		
+		if not name:
 			name = port # if no name provided, just use the port name
 
 		self.logger = logging.getLogger("Serial(%s)"%name)

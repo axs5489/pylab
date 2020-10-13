@@ -6,6 +6,72 @@ import time
 import re
 import queue
 import threading
+import win32pipe
+import win32file
+
+class SerialPipe(object):
+	""" This class mimics the python serial interface, but instead of 
+		reading/writing data to a physical Serial Port device, it 
+		reads/writes to the device through a proxy via a Named Pipe. 
+		
+		This is used in conjunction with the SerialProxy program which
+		actually connects to the physical Serial Port and then provides
+		multiple connections via a named pipe (\\.\pipe\COMx).
+		"""
+	def __init__(self,name,timeout):
+		self.handle = win32file.CreateFile(name,
+				  win32file.GENERIC_READ | win32file.GENERIC_WRITE,
+				  0, None, win32file.OPEN_EXISTING, 0, None)
+		self.timeout = timeout
+
+	def close(self):
+		""" Closes the Serial Port Pipe. """
+		win32file.CloseHandle(self.handle)
+		self.handle = None
+
+	def write(self, data):
+		""" Writes data to the Serial Port Pipe. """
+		win32file.WriteFile(self.handle, data)
+
+	def readline(self):
+		""" Reads a single line from the Serial Port Pipe. """
+		if self.timeout > 0:
+			start_time = time.time()
+			total_num_bytes = 0
+			while (time.time() - start_time) < self.timeout:
+				(pipeData,numBytes,unused)=win32pipe.PeekNamedPipe(self.handle,4096)
+				if numBytes>0:
+					# look for the line-end. if found, read up to (and including) the line-end
+					# if never found and we time-out, just read everything available...
+					lineEndIdx = pipeData.find('\n')
+					if( lineEndIdx >= 0 ):
+						numBytes = lineEndIdx + 1
+						break
+
+					# if we did get some NEW bytes (but still no newline), reset the start-time 
+					# so that we don't prematurely give up if there's more data coming
+					if numBytes > total_num_bytes:
+						total_num_bytes = numBytes
+						start_time = time.time()
+				time.sleep(0.1)
+		else:
+			(pipeData,numBytes,unused)=win32pipe.PeekNamedPipe(self.handle,4096)
+
+		if numBytes>0:
+			data = win32file.ReadFile(self.handle, numBytes)
+			line = data[1]
+		else:
+			line = ''
+		return line
+	 
+	def flushInput(self):
+		""" Flush's the Serial Port Pipe receive buffer. """
+		# TBD: Don't do this since it has threading issues which cause us to 
+		#	  block indefinitely. Instead, rely on the async Queue flush to handle this.
+		#(pipeData,numBytes,unused)=win32pipe.PeekNamedPipe(self.handle,4096)
+		#if numBytes>0:
+		#	data = win32file.ReadFile(self.handle, numBytes)
+		pass
 
 def async_serial_receive(handle,q,stop):
 	""" This is the Asynchronous serial port read thread handler function. """
@@ -71,6 +137,10 @@ class SerialPort(object):
 				parity="N", stopbits=1, timeout=3.0, writeTimeout=3.0, xonxoff=0, rtscts=0)
 		except Exception as e:
 			print("Couldn't connect directly to %s - %s"%(port,e))
+			try:
+				self.handle = SerialPipe(r'\\.\pipe\%s'%port, timeout=3.0)
+			except:
+				raise Exception("Error opening Serial Port: %s!!" % port)
 
 		# If Asynchronous, setup and start the helper thread
 		# Pass a lambda function that just returns the stop flag to support 
@@ -191,7 +261,7 @@ class SerialPort(object):
 		else:
 			self.handle.flushInput()
 
-	def waitfor(self,waitStr,timeout=10,timeoutException=True,useRegex=False,caseSensitive=False):
+	def waitFor(self,waitStr,timeout=10,timeoutException=True,useRegex=False,caseSensitive=False):
 		""" Reads from the serial port until waitStr is matched.
 				waitStr: sub string or regex to wait on (if this string matches any part of a read line, return)
 				timeout: timeout in seconds
@@ -222,7 +292,7 @@ class SerialPort(object):
 						return s.strip()
 
 		if timeoutException:
-			raise SerialPort.Timeout("SerialPortDevice.waitfor() timed out waiting for '%s'" % waitStr)
+			raise SerialPort.Timeout("SerialPort.waitfor() timed out waiting for '%s'" % waitStr)
 		else:
 			return ''
 

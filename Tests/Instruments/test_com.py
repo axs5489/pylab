@@ -19,7 +19,7 @@ import visa
 
 close = True
 com_types = [SerialPort, Console, Channel, Radio]
-comcls = com_types[0]
+comcls = com_types[1]
 stp = "COM1"
 red = "COM4"
 blk = "COM5"
@@ -88,29 +88,29 @@ for addr in com_list:
 	except:
 		print("COM Error: ", addr)
 
-time.sleep(30)
+time.sleep(40)
 reduut.flush()
 blkuut.flush()
 print("LOOPING")
 #try:
-while True:
-	for a,r in res.items():
-		print(a)
-		buf = ""
-		while r.inWaiting() > 0:
-			#print(r.readline())
-			buf += r.read(100)
-			print(buf)
-			buf = ""
-			
-		r.validatePrompt(buf)
-		if(not r.validatePrompt(buf, True)):
-			r.send("ASCII")
-		r.validatePrompt(buf)
-		time.sleep(1)
-		print("NEXT")
-	time.sleep(1)
-	print("AGAIN")
+# while True:
+# 	for a,r in res.items():
+# 		print(a)
+# 		buf = ""
+# 		while r.inWaiting() > 0:
+# 			#print(r.readline())
+# 			buf += r.read(100)
+# 			print(buf)
+# 			buf = ""
+# 			
+# 		r.validatePrompt(buf)
+# 		if(not r.validatePrompt(buf, True)):
+# 			r.send("ASCII")
+# 		r.validatePrompt(buf)
+# 		time.sleep(1)
+# 		print("NEXT")
+# 	time.sleep(1)
+# 	print("AGAIN")
 #except Exception as e:
 #	print(e)
 

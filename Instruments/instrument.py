@@ -47,12 +47,14 @@ class BaseInstrument():
 			raise Exception("Invalid Adapter provided for Instrument since PyVISA is not present")
 		self._name = name
 		self._adapter = adapter
-		
 		self._active = True
 		
 	def close(self):
 		self._name = None
+		if(hasattr(self._adapter,"close")):
+			self._adapter.close()
 		self._adapter = None
+		self._active = None
 
 	def __del__(self):
 		self.close()
@@ -111,6 +113,13 @@ class BaseInstrument():
 	def clear(self):
 		""" Clears the instrument status byte """
 		self.write("*CLS")
+
+	def command_state(self, command, bool):
+		state = 'ON' if bool else 'OFF'
+		return self.write(command + ' ' +  state)
+
+	def command_value(self, command, value, units=''):
+		return self.write(command + ' ' + str(value) + units)
 
 	def reset(self):
 		""" Resets the instrument. """
@@ -293,22 +302,6 @@ class BaseInstrument():
 		return property(fget, fset)
 
 
-class Channel(BaseInstrument):
-	""" Intermediate class for equipment with multiple channels. """
-
-	def __init__(self, channel, adapter, parent, **kwargs):
-		super(Channel,self).__init__(str(channel), adapter, **kwargs)
-		self.chnum = channel
-		self.parent = parent
-	
-	def close(self):
-		self.chnum = None
-		self.parent = None
-		super(Channel,self).close()
-	
-	def getChannel(self):
-		return self.chnum
-
 class Instrument(BaseInstrument):
 	""" Intermediate class for equipment with multiple channels. """
 
@@ -333,6 +326,9 @@ class Instrument(BaseInstrument):
 	def beep(self):
 		""" Clears the instrument status byte """
 		self.write("SYST:BEEP")
+
+	def complete(self):
+		return self.ask('*OPC?')
 	
 	def fetch(self):
 		return self.value("FETC?")
@@ -433,6 +429,64 @@ class FakeInstrument(Instrument):
 								  check_set_errors=check_set_errors,
 								  check_get_errors=check_get_errors, **kwargs)
 
+
+class Channel(BaseInstrument):
+	""" Intermediate class for equipment with multiple channels. """
+
+	def __init__(self, channel, adapter, parent, **kwargs):
+		super(Channel,self).__init__(str(channel), adapter, **kwargs)
+		self.chnum = channel
+		self.parent = parent
+	
+	def close(self):
+		self.chnum = None
+		self.parent = None
+		super(Channel,self).close()
+	
+	def getChannel(self):
+		return self.chnum
+	
+class ChannelizedInstrument(Instrument):
+	""" Class for equipment with channels. """
+
+	def __init__(self, name, adapter, **kwargs):
+		super(ChannelizedInstrument,self).__init__(name, adapter, **kwargs)
+		self.channels = []
+		self.active = 1
+	
+	def close(self):
+		for i in range(len(self.channels)):
+			self.remChannel(len(self.channels) - i - 1)
+		del self.channels
+		del self.active
+	
+	def addChannel(self, ch):
+		if(isinstance(ch, Channel)):
+			if(ch.chnum == -1):
+				self.channels.append(ch)
+				ch.chnum = len(self.channels)
+				setattr(self,"ch{}".format(ch.chnum), ch)
+			elif(ch.chnum > 0):
+				self.channels[ch.chnum - 1] = ch
+				setattr(self,"ch{}".format(ch.chnum), ch)
+			else:
+				print("Invalid index {} for Instrument Channel {}".format(ind, ch))
+		else:
+			print("Needs to be a Channel Object!")
+	
+	def getChannel(self, ind):
+		return self.channels[ind]
+	
+	def remChannel(self, ind = -1):
+		self.channels[ind].close()
+		del self.channels[ind]
+		if(ind == -1):
+			delattr(self, "ch{}".format(len(self.channels) + 1))
+		elif(ind >= 0):
+			delattr(self, "ch{}".format(ind + 1))
+		else:
+			print("Invalid index {} for Instrument Channel {}".format(ind, ch))
+		
 	
 class MathInstrument(Instrument):
 	""" Class for equipment with Math capabilities. """

@@ -1,15 +1,18 @@
-from Instruments.instrument import Channel, Instrument
-# from Instruments.validators import strict_discrete_set
+from Instruments.instrument import Channel, Instrument, ChannelizedInstrument
+from Instruments.validators import strict_discrete_set
 
 class PSChannel(Channel):
 	def __init__(self, channel, adapter, parent, **kwargs):
 		super(PSChannel, self).__init__(channel, adapter, parent, **kwargs)
 
-class PS(Instrument):
+class PS(ChannelizedInstrument):
 	models = ["PS", "GENH\d\d-\d\d"]
 	def __init__(self, name, adapter, **kwargs):
 		super(PS, self).__init__(name, adapter, **kwargs)
 		self.write('SYST:ERR:ENABLE')
+	
+	def close(self):
+		pass
 
 # 	mode = Instrument.control("SYST:SET %s", "SYST:SET?", "Output state, REM or LOC",
 # 							strict_discrete_set, ["REM", "LOC"])
@@ -38,6 +41,10 @@ class PS(Instrument):
 			self.write('OUTP:STAT ' + str(output))
 		else:
 			print("Output state (" + output + ") not in " + str(self._ONOFF))
+	
+	out_en = Instrument.control(":OUTP:STAT?;", "OUTP:STAT %s;", "OUTPUT, ON or OFF",
+							strict_discrete_set, [0, 1, "ON", "OFF"]
+	)
 
 	def overcurrent_state(self, output=None):
 		if output == None:

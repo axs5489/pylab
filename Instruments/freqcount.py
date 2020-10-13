@@ -1,4 +1,4 @@
-from Instruments.instrument import Channel, Instrument, Meter
+from Instruments.instrument import Channel, Instrument, ChannelizedInstrument, Meter
 from Instruments.validators import strict_discrete_set
 import numpy as np
 
@@ -7,6 +7,9 @@ class FreqCounterChannel(Channel):
 	_IMP = [50, 1000000, "50", "1E6"]
 	def __init__(self, channel, adapter, parent, **kwargs):
 		super(FreqCounterChannel, self).__init__(channel, adapter, parent, **kwargs)
+	
+	def close(self):
+		pass
 	
 	def atten(self, att = None):
 		if(att == None):
@@ -40,7 +43,7 @@ class FreqCounterChannel(Channel):
 		else:
 			print("INVALID IMPEDANCE: ", imp)
 
-class FreqCounter(Meter):
+class FreqCounter(Meter, ChannelizedInstrument):
 	models = ["CNT", r"5313\dA"]
 	_FUNC = ["MIN", "MAX", "PTP"] # Single channel measurements w/ no params
 	_FUNC1 = ["DCYCLE", "FTIME", "RTIME", "NWIDTH", "PWIDTH", "TOT:TIM"] # Ch 1 measurements w/ param(s)
@@ -57,6 +60,11 @@ class FreqCounter(Meter):
 		self.ch1 = FreqCounterChannel(1, adapter, self, **kwargs)
 		self.ch2 = FreqCounterChannel(2, adapter, self, **kwargs)
 		self._func = ''
+	
+	def close(self):
+		del self.ch1
+		del self.ch2
+		del self._func
 	
 	def dutyCycle(self, param = 50, source = 1):
 		if(source == 1):

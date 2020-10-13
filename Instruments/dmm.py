@@ -11,6 +11,10 @@ class DMM(Meter):
 		super(DMM, self).__init__(makemodel, adapter, **kwargs)
 		self._range = 'DEF'
 		self._resolution = 'DEF'
+	
+	def close(self):
+		del self._range
+		del self._resolution
 
 	mode = Instrument.control('FUNC?"','FUNC "%s"', "FUNCTION",
 							strict_discrete_set, _FUNC)

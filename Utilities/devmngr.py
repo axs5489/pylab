@@ -7,7 +7,7 @@ Created on Mon Feb 17 13:26:43 2020
 from collections import defaultdict
 from Adapters.visa import VISAAdapter
 from Instruments import Adu2xx
-from Instruments.audiomod import AudioAnalyzer
+from Instruments.audiomod import AudioAnalyzer, ModulationAnalyzer
 from Instruments.dmm import DMM
 from Instruments.fireberd import FireBERD
 from Instruments.freqcount import FreqCounter
@@ -29,8 +29,8 @@ import visa
 
 adu_types = ["ADU"]
 com_types = ["CON", "STP", "RCP", "RED", "BLK", "RUT", "BUT", "RFSW"]
-res_types = [AudioAnalyzer, ArbGen, DMM, FireBERD, FreqCounter, NetAnalyzer, 
-			 PowerMeter, PS, rfSW, SigGen, GSG, SpecAnalyzer, Oscilloscope]
+res_types = [AudioAnalyzer, ArbGen, DMM, FireBERD, FreqCounter, ModulationAnalyzer, 
+			NetAnalyzer, PowerMeter, PS, rfSW, SigGen, GSG, SpecAnalyzer, Oscilloscope]
 
 
 class Station():
@@ -138,18 +138,7 @@ class Station():
 			elif(typ == "VISA"):
 				for instr in reslist:
 					try:
-						res = self._rm.open_resource(instr)
-						try:
-							idn = res.query('*idn?')[:-1]
-							mm = splitResourceID(idn)
-							resadptr = VISAAdapter(mm[1], res)
-							if self._debugOn : print("\t", instr, ":", idn)
-							for icls in res_types:
-								sup = icls.checkSupport(mm[1])
-								if(sup):
-									self._instruments[sup].append(icls(mm,resadptr))
-						except visa.Error:
-							idn = "Not known"
+						self.addInstrument(instr)
 					except visa.VisaIOError as e:
 						print(instr, ":", "Visa IO Error: check connections")
 						print(e)
@@ -157,18 +146,43 @@ class Station():
 				print("What the hell is this?")
 		return True
 
-	def addConsole(self, name, addr):
+	def addConsole(self, port, name = None):
 		if(name.find("RED") or name.find("RCR")) :
 			self.active[name] = None
 		elif(name.find("BLK") or name.find("RCR")) :
 			pass
+		elif(name is None):
+			pass
 		else:
-			print("What is this COM Port? ", name, addr)
+			print("What is this COM Port? ", name, port)
 	
 	def addDevice(self, name, addr):
 		pass
 	
-	def addInstrument(self, name, addr):
+	def addInstrument(self, addr):
+		res = self._rm.open_resource(addr)
+		try:
+			idn = res.query('*idn?')[:-1]
+			mm = splitResourceID(idn)
+			resadptr = VISAAdapter(mm[1], res)
+			if self._debugOn : print("\t", addr, ":", idn)
+			for icls in res_types:
+				sup = icls.checkSupport(mm[1])
+				if(sup):
+					self._instruments[sup].append(icls(mm,resadptr))
+		except visa.Error:
+			idn = "Not known"
+
+	def closeConsole(self, port):
+		pass
+
+	def closeDevice(self, name, addr):
+		pass
+
+	def closeInstrument(self, name, addr):
+		pass
+
+	def getConsole(self, port):
 		pass
 	
 	def getDevice(self, devtype, name):
@@ -188,10 +202,7 @@ class Station():
 	def getInstrument(self, name, addr):
 		pass
 
-	def delDevice(self, name, addr):
-		pass
-
-	def delInstrument(self, name, addr):
+	def getInstrumentbyType(self, typ):
 		pass
 
 	def reset(self):

@@ -5,7 +5,34 @@ class SigGen(RFInstrument):
 	models = ["SG", r"8257D", r"E443\d[CD]"]
 	def __init__(self, name, adapter, **kwargs):
 		super(SigGen, self).__init__(name, adapter, **kwargs)
-		self.amplitude_units = 'Vpp'
+
+	def frequency(self, freq=None, units ="Hz"):
+		if freq == None:
+			return self.ask('FREQ?')
+		elif(isinstance(freq, int) or isinstance(freq, float)):
+			self.write('FREQ ' + str(freq) + units)
+		elif(isinstance(freq, str)):
+			self.write('FREQ ' + freq)
+		else:
+			print("Frequency (" + freq + ") is not int, float or str ")
+
+	def level(self, ampl=None, units ="dBm"):
+		if ampl == None:
+			return self.ask('POW?')
+		elif(isinstance(ampl, int) or isinstance(ampl, float)):
+			self.write('POW:AMPL ' + str(ampl) + units)
+		elif(isinstance(ampl, str)):
+			self.write('POW:AMPL ' + ampl)
+		else:
+			print("Amplitude (" + ampl + ") is not int, float or str ")
+
+	def output_state(self, output=None):
+		if output == None:
+			return self.ask('OUTP:STAT?')
+		elif output in self._ONOFF:
+			self.write('OUTP:STAT ' + str(output))
+		else:
+			print("Output state (" + output + ") not in " + str(self._ONOFF))
 
 	def set_frequency_start_stop(self, start, stop):
 		self.write(':SENS1:FREQ:STAR ' + str(start))
@@ -132,7 +159,7 @@ class SigGen(RFInstrument):
 		'internal':'INT', 'internal 2':'INT2', 'function':'FUNC', 'function 2':'FUNC2'
 	}
 
-	low_freq_out_amplitude = Instrument.control(
+	lfo_amplitude = Instrument.control(
 		":SOUR:LFO:AMPL? ", ":SOUR:LFO:AMPL %g VP",
 		"""A floating point property that controls the peak voltage (amplitude) of the
 		low frequency output in volts, which can take values from 0-3.5V""",
@@ -140,7 +167,7 @@ class SigGen(RFInstrument):
 		values=[0,3.5]
 	)
 
-	low_freq_out_source = Instrument.control(
+	lfo_source = Instrument.control(
 		":SOUR:LFO:SOUR?", ":SOUR:LFO:SOUR %s",
 		"""A string property which controls the source of the low frequency output, which
 		can take the values 'internal [2]' for the inernal source, or 'function [2]' for an internal
@@ -150,13 +177,14 @@ class SigGen(RFInstrument):
 		map_values=True
 	)
 
-	def enable_low_freq_out(self):
+	def enable_LFO(self, output):
 		"""Enables low frequency output"""
-		self.write(":SOUR:LFO:STAT ON")
-
-	def disable_low_freq_out(self):
-		"""Disables low frequency output"""
-		self.write(":SOUR:LFO:STAT OFF")
+		if output == None:
+			return self.ask('SOUR:LFO:STAT?')
+		elif output in self._ONOFF:
+			self.write('SOUR:LFO:STAT ' + str(output))
+		else:
+			print("Output state (" + output + ") not in " + str(self._ONOFF))
 
 	def config_low_freq_out(self, source='internal', amplitude=3):
 		""" Configures the low-frequency output signal.
@@ -193,22 +221,41 @@ class SigGen(RFInstrument):
 		map_values=True
 	)
 
-	def enable(self):
+	def enable(self, output):
 		""" Enables the output of the signal. """
+		if output == None:
+			return self.ask('OUTPUT?')
+		elif output in self._ONOFF:
+			self.write('OUTPUT ' + str(output))
+		else:
+			print("Output state (" + output + ") not in " + str(self._ONOFF))
 		self.write(":OUTPUT ON;")
 
-	def disable(self):
-		""" Disables the output of the signal. """
-		self.write(":OUTPUT OFF;")
-
-	def enable_modulation(self):
-		self.write(":OUTPUT:MOD ON;")
-		self.write(":lfo:sour int; :lfo:ampl 2.0vp; :lfo:stat on;")
+	def enable_modulation(self, output):
+		if output == None:
+			return self.ask('OUTPUT:MOD?')
+		elif output in self._ONOFF:
+			self.write('OUTPUT:MOD ' + str(output))
+		else:
+			print("Output state (" + output + ") not in " + str(self._ONOFF))
 
 	def disable_modulation(self):
 		""" Disables the signal modulation. """
 		self.write(":OUTPUT:MOD OFF;")
 		self.write(":lfo:stat off;")
+
+	def enable_multitone(self, output):
+		if output == None:
+			return self.ask('RAD:MTON:ARB?')
+		elif output in self._ONOFF:
+			self.write('RAD:MTON:ARB ' + str(output))
+		else:
+			print("Output state (" + output + ") not in " + str(self._ONOFF))
+
+	def set_n_tones(self, n, spacing, units='Hz'):
+		""" TODO: COMMENTS, mutliple returns... combine? """
+		self.command_value('RAD:MTON:ARB:SET:TABL:FSP', spacing, units)
+		self.command_value('RAD:MTON:ARB:SET:TABL:NTON', n)
 
 	def config_amplitude_modulation(self, frequency=1e3, depth=100.0, shape='sine'):
 		""" Configures the amplitude modulation of the output signal.
@@ -223,13 +270,14 @@ class SigGen(RFInstrument):
 		self.internal_shape = shape
 		self.amplitude_depth = depth
 
-	def enable_amplitude_modulation(self):
+	def enable_AM(self, output):
 		""" Enables amplitude modulation of the output signal. """
-		self.write(":SOUR:AM:STAT ON")
-
-	def disable_amplitude_modulation(self):
-		""" Disables amplitude modulation of the output signal. """
-		self.write(":SOUR:AM:STAT OFF")
+		if output == None:
+			return self.ask('SOUR:AM:STAT?')
+		elif output in self._ONOFF:
+			self.write('SOUR:AM:STAT ' + str(output))
+		else:
+			print("Output state (" + output + ") not in " + str(self._ONOFF))
 
 	def config_pulse_modulation(self, frequency=1e3, input='square'):
 		""" Configures the pulse modulation of the output signal.
@@ -242,19 +290,14 @@ class SigGen(RFInstrument):
 		self.pulse_input = input
 		self.pulse_frequency = frequency
 
-	def enable_pulse_modulation(self):
+	def enable_PM(self, output):
 		""" Enables pulse modulation of the output signal. """
-		self.write(":SOUR:PULM:STAT ON")
-
-	def disable_pulse_modulation(self):
-		""" Disables pulse modulation of the output signal. """
-		self.write(":SOUR:PULM:STAT OFF")
-
-	def config_step_sweep(self):
-		""" Configures a step sweep through frequency """
-		self.write(":SOUR:FREQ:MODE SWE;"
-				   ":SOUR:SWE:GEN STEP;"
-				   ":SOUR:SWE:MODE AUTO;")
+		if output == None:
+			return self.ask('SOUR:PULM:STAT?')
+		elif output in self._ONOFF:
+			self.write('SOUR:PULM:STAT ' + str(output))
+		else:
+			print("Output state (" + output + ") not in " + str(self._ONOFF))
 
 	def enable_retrace(self):
 		self.write(":SOUR:LIST:RETR 1")
@@ -262,8 +305,36 @@ class SigGen(RFInstrument):
 	def disable_retrace(self):
 		self.write(":SOUR:LIST:RETR 0")
 
+	def config_step_sweep(self):
+		""" Configures a step sweep through frequency """
+		self.write(":SOUR:FREQ:MODE SWE;"
+				   ":SOUR:SWE:GEN STEP;"
+				   ":SOUR:SWE:MODE AUTO;")
+
+	def enable_sweep(self, output=True):
+		if output == None:
+			return self.ask('FREQ:MODE?')
+		elif(output):
+			self.write('FREQ:MODE LIST')
+		elif(not output):
+			self.write('FREQ:MODE CW')
+		else:
+			print("Output state (" + output + ") not in " + str(self._ONOFF))
+
 	def single_sweep(self):
 		self.write(":SOUR:TSW")
+
+	def single_sweep_sdr(self, bool=True):
+		self.command_state('INIT:CONT', not bool)
+		if bool : self.write('INIT:IMM')
+
+	def set_frequency_sweep(self, start, stop, n, units='Hz', dwell=0.002, direction='UP'):
+		self.command_value('LIST:DIR', direction)
+		self.command_value('SWE:DWEL', dwell)
+		self.command_value('SWE:POIN', n)
+		self.command_value('FREQ:STAR', start, units)
+		self.command_value('FREQ:STOP', stop, units)
+		self.command_value('FREQ:MODE', 'LIST')
 
 	def start_step_sweep(self):
 		""" Starts a step sweep. """

@@ -6,7 +6,7 @@ Created on Tue May 12 17:36:17 2020
 """
 
 from Adapters.visa import VISAAdapter
-from Instruments.audiomod import AudioAnalyzer
+from Instruments.audiomod import AudioAnalyzer, ModulationAnalyzer
 from Instruments.dmm import DMM
 from Instruments.fireberd import FireBERD
 from Instruments.freqcount import FreqCounter
@@ -24,8 +24,8 @@ from Utilities import devmngr, win
 import visa
 
 
-instruments = [AudioAnalyzer, ArbGen, DMM, FireBERD, FreqCounter, NetAnalyzer, 
-			 PowerMeter, PS, rfSW, SigGen, GSG, SpecAnalyzer, Oscilloscope]
+instruments = [AudioAnalyzer, ArbGen, DMM, FireBERD, FreqCounter, ModulationAnalyzer, 
+			NetAnalyzer, PowerMeter, PS, rfSW, SigGen, GSG, SpecAnalyzer, Oscilloscope]
 addr_cnt = "GPIB0::14::INSTR"
 addr_dmm = None#"GPIB0::7::INSTR"
 addr_pm = "GPIB0::13::INSTR"
