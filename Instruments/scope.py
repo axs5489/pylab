@@ -1,170 +1,312 @@
-from Instruments.instrument import Channel, Instrument, ChannelizedInstrument
+from Instruments.instrument import Channel, BaseInstrument, ChannelizedInstrument
 from Instruments.validators import strict_discrete_set
 
 class ScopeChannel(Channel):
-	SOURCE_VALUES = ['CH1', 'CH2', 'CH3', 'CH4', 'MATH']
-	COUPLING_VALUES = ['AC', 'DC', 'DCREJ']
+	_SOURCE_VALUES = ["CH1", "CH2", "CH3", "CH4", "MATH"]
 	
-	def __init__(self, parent, num):
-		self.parent = parent
-		self.num = num
-		self.preamble = "MEAS:IMM" + str(num)
+	def __init__(self, channel, adapter, parent, **kwargs):
+		super(ScopeChannel, self).__init__(channel, adapter, parent, **kwargs)
+		
+	def coupling(self, cpl = None):
+		return self.command(":COUP", cpl, self._CPL)
+		
+	def offset(self, off = None):
+		if(isinstance(off, str) and off.find("+") == -1) : off = int(off)
+		if(isinstance(off, int) or isinstance(off, float)) : off = "{:e}".format(off)
+		return self.command(":OFFS", off)
+		
+	def scale(self, div = None):
+		if(isinstance(div, str) and div.find("+") == -1) : div = int(div)
+		if(isinstance(div, int) or isinstance(div, float)) : div = "{:e}".format(div)
+		return self.command(":SCALE", div)
+
+class DSOChannel(ScopeChannel):
+	_CPL = BaseInstrument._ACDC
+	_IMP = ["ONEM", "FIFT"]
+	
+	def __init__(self, channel, adapter, parent, **kwargs):
+		super(DSOChannel, self).__init__(channel, adapter, parent, **kwargs)
+		self.preamble = "CHAN" + str(channel)
+	
+	def attenuation(self, att = None):
+		if(isinstance(att, str) and att.find("+") == -1) : att = int(att)
+		if(isinstance(att, int) or isinstance(att, float)) : att = "{:e}".format(att)
+		return self.command(":PROB", att)
+	
+	def bandwidth(self, en = None):
+		return self.command(":BWL", en)
+	
+	def deskew(self, sk = None):
+		if(isinstance(sk, str) and sk.find("+") == -1) : sk = int(sk)
+		if(isinstance(sk, int) or isinstance(sk, float)) : sk = "{:e}".format(sk)
+		return self.command(":PROB:SKEW", sk)
+	
+	def display(self, en = None):
+		return self.command(":DISP", en)
+	
+	def impedance(self, imp = None):
+		return self.command(":IMP", imp, self._IMP)
+	
+	def invert(self, en = None):
+		return self.command(":INV", en)
+	
+	def label(self, lbl = None):
+		if(lbl != None):
+			lbl = ("\"" + str(lbl) + "\"").upper()
+		return self.command(":LAB", lbl)
+	
+	def range(self, fs = None):
+		if(isinstance(fs, str) and fs.find("+") == -1) : fs = int(fs)
+		if(isinstance(fs, int) or isinstance(fs, float)) : fs = "{:e}".format(fs)
+		return self.command(":RANG", fs)
+	
+	def termination(self, hiz = True):
+		if(hiz):
+			return self.impedance("ONEM")
+		else:
+			return self.impedance("FIFT")
+	
+	def vernier(self, en = None):
+		return self.command(":VERN", en)
+
+class MSOChannel(ScopeChannel):
+	_SOURCE_VALUES = ["CH1", "CH2", "CH3", "CH4", "MATH"]
+	_CPL = ["AC", "DC", "DCREJ"]
+	
+	def __init__(self, channel, adapter, parent, **kwargs):
+		super(MSOChannel, self).__init__(channel, adapter, parent, **kwargs)
+		self.preamble = "CH" + str(channel)
+		self.pre = "MEAS:IMM" + str(channel)
 		
 	def bandwidth(self, bw = None):
 		if(bw == None):
-			return self.parent.ask("CH%e:BAN?" % (self.num))
+			return self.ask("CH{}:BAN?".format(self.chnum))
 		else:
-			return self.parent.ask("CH%e:BAN %e" % (self.num, bw))
+			return self.ask("CH{}:BAN {}".format(self.chnum, bw))
 		
-	def coupling(self, cpl = None):
-		if(cpl == None):
-			return self.parent.ask("CH%e:COUP?" % (self.num))
-		elif(cpl in self.COUPLING_VALUES):
-			return self.parent.ask("CH%e:COUP %s" % (self.num, cpl))
-		else:
-			raise ValueError("Invalid coupling ('%s') provided to %s" % (cpl, self.parent))
+	# def coupling(self, cpl = None):
+		# if(cpl == None):
+			# return self.ask("CH{}:COUP?".format(self.chnum))
+		# elif(cpl in self._COUPLING_VALUES):
+			# return self.write("CH{}:COUP {}".format(self.chnum, cpl))
+		# else:
+			# raise ValueError("Invalid coupling {} provided to {}".format(cpl, self.parent))
 		
 	def deskew(self, offset = None):
 		if(offset == None):
-			return self.parent.ask("CH%e:DESK?" % (self.num))
-		elif(abs(offset) <= 125e-9 and (offset % 40e-12 == 0)):
-			return self.parent.ask("CH%e:DESK %e" % (self.num, offset))
+			return self.ask("CH{}:DESK?".format(self.chnum))
+		elif(abs(offset) <= 125e-9 and (offset.format40e-12 == 0)):
+			return self.write("CH{}:DESK {:e}".format(self.chnum, offset))
 		else:
-			raise ValueError("Invalid deskew time ('%s') provided to %s" % (offset, self.parent))
+			raise ValueError("Invalid deskew time {} provided to {}".format(offset, self.parent))
 		
 	def label(self, name = None):
 		if(name == None):
-			return self.parent.ask("CH%e:LAB:NAM?" % (self.num))
+			return self.ask("CH{}:LAB:NAM?".format(self.chnum))
 		else:
-			return self.parent.ask("CH%e:LAB:NAM %s" % (self.num, name))
+			return self.write("CH{}:LAB:NAM {}".format(self.chnum, name))
 		
-	def offset(self, voffset = None):
-		if(voffset == None):
-			return self.parent.ask("CH%e:OFFS?" % (self.num))
-		else:
-			return self.parent.ask("CH%e:OFFS %e" % (self.num, voffset))
+	# def offset(self, voffset = None):
+		# if(voffset == None):
+			# return self.ask("CH{}:OFFS?".format(self.chnum))
+		# else:
+			# return self.write("CH{}:OFFS {:e}".format(self.chnum, voffset))
 		
 	def position(self, pos = None):
 		if(pos == None):
-			return self.parent.ask("CH%e:POS?" % (self.num))
+			return self.ask("CH{}:POS?".format(self.chnum))
 		else:
-			return self.parent.ask("CH%e:POS %d" % (self.num, pos))
+			return self.write("CH{}:POS %d".format(self.chnum, pos))
 		
-	def scale(self, div = None):
-		if(div == None):
-			return self.parent.ask("CH%e:SCA?" % (self.num))
-		else:
-			return self.parent.ask("CH%e:SCA %e" % (self.num, div))
+	# def scale(self, div = None):
+		# if(div == None):
+			# return self.ask("CH{}:SCA?".format(self.chnum))
+		# else:
+			# return self.write("CH{}:SCA {:e}".format(self.chnum, div))
 		
 	def scaleratio(self, div = None):
 		if(div == None):
-			return self.parent.ask("CH%e:SCALERAT?" % (self.num))
+			return self.ask("CH{}:SCALERAT?".format(self.chnum))
 		else:
-			return self.parent.ask("CH%e:SCALERAT %d" % (self.num, div))
+			return self.write("CH{}:SCALERAT {:e}".format(self.chnum, div))
 		
 	def termination(self, term = None):
 		if(term == None):
-			return self.parent.ask("CH%e:TER?" % (self.num))
+			return self.ask("CH{}:TER?".format(self.chnum))
 		elif(term == 50 or term == 1e6):
-			return self.parent.ask("CH%e:TER %e" % (self.num, term))
+			return self.write("CH{}:TER {:e}".format(self.chnum, term))
 		else:
-			raise ValueError("Invalid termination ('%s') provided to %s" % (term, self.parent))
+			raise ValueError("Invalid termination {} provided to {}".format(term, self.parent))
 		
 	def probe(self):
 		# FORMAT: MODEL, SERNUM, GAIN, UNITS, TYPE, 
-		return self.parent.ask("CH%e:PRO?" % (self.num))
+		return self.ask("CH{}:PRO?".format(self.chnum))
 		
 	def gain(self):
-		return self.parent.ask("CH%e:PRO:GAIN?" % (self.num))
+		return self.ask("CH{}:PRO:GAIN?".format(self.chnum))
 	
 	@property
 	def value(self):
-		return self.parent.values("%sVAL?" % self.preamble)
+		return self.values("{}VAL?".format(self.pre))
 
 	@property
 	def source(self):
-		return self.parent.ask("%sSOU?" % self.preamble).strip()
+		return self.ask("{}SOU?".format(self.pre).strip())
 
 	@source.setter
 	def source(self, value):
 		if value in self.SOURCE_VALUES:
-			self.parent.write("%sSOU %s" % (self.preamble, value))
+			self.write("{}SOU {}".format(self.pre, value))
 		else:
-			raise ValueError("Invalid source ('%s') provided to %s" % (
+			raise ValueError("Invalid source {} provided to {}".format(
 							 self.parent, value))
 
 	@property
 	def type(self):
-		return self.parent.ask("%sTYP?" % self.preamble).strip()
+		return self.ask("{}TYP?".format(self.pre).strip())
 
 	@type.setter
 	def type(self, value):
 		if value in self.TYPE_VALUES:
-			self.parent.write("%sTYP %s" % (self.preamble, value))
+			self.write("{}TYP {}".format(self.pre, value))
 		else:
-			raise ValueError("Invalid type ('%s') provided to %s" % (
+			raise ValueError("Invalid type {} provided to {}".format(
 							 self.parent, value))
 
 	@property
 	def unit(self):
-		return self.parent.ask("%sUNI?" % self.preamble).strip()
+		return self.ask("{}UNI?".format(self.preamble).strip())
 
 	@unit.setter
 	def unit(self, value):
 		if value in self.UNIT_VALUES:
-			self.parent.write("%sUNI %s" % (self.preamble, value))
+			self.write("{}UNI {}".format(self.preamble, value))
 		else:
-			raise ValueError("Invalid unit ('%s') provided to %s" % (
+			raise ValueError("Invalid unit {} provided to {}".format(
 							 self.parent, value))
 
 class Oscilloscope(ChannelizedInstrument):
-	models = ["SCP", "[DM]SO\d\d\d\d[ABCD]?"]
-	acq_modes = ["AVE", "ENV", "SAM", "PEAK", "HIR"]
+	models = ["SCP", r"[DM]SO\d\d\d\d[ABCD]?"]
+	
 	def __init__(self, name, adapter, **kwargs):
 		super(Oscilloscope, self).__init__(name, adapter, **kwargs)
-		self._maxsamplerate = self.query("ACQuire:MAXSamplerate?")
-		self.ch1 = ScopeChannel(self, 1)
-		self.ch2 = ScopeChannel(self, 2)
-		self.ch3 = ScopeChannel(self, 3)
-		self.ch4 = ScopeChannel(self, 4)
-	
-	def close(self):
-		pass
 
-	acq_mode = Instrument.control('ACQ:MOD?"','FUNC "%s"', "FUNCTION",
+class DSO(Oscilloscope):
+	models = ["SCP", r"DSO\d\d\d\d[ABCD]?"]
+	_ACQ = ["AVE", "ENV", "SAM", "PEAK", "HIR"]
+	_TIM = ["MAIN", "WIND", "XY", "ROLL"]
+	
+	def __init__(self, name, adapter, **kwargs):
+		super(DSO, self).__init__(name, adapter, **kwargs)
+		#self._maxsamplerate = self.ask("ACQuire:MAXSamplerate?")
+		self.ch1 = DSOChannel(1, adapter, self)
+		self.ch2 = DSOChannel(2, adapter, self)
+		self.ch3 = DSOChannel(3, adapter, self)
+		self.ch4 = DSOChannel(4, adapter, self)
+	
+	def clearDisplay(self):
+		self.write("DISP:CLEAR")
+	
+	def displayLines(self, en=None):
+		return self.command("DISP:VECTORS", en)
+	
+	def persistence(self, en=None):
+		return self.command("DISP:PERS", en, ["INF", "MIN"])
+	
+	def scale(self, t=None):
+		if(isinstance(t, str) and t.find("+") == -1) : t = int(t)
+		if(isinstance(t, int) or isinstance(t, float)) : t = "{:e}".format(t)
+		return self.command("TIM:SCALE", t)
+	
+	def winmode(self, m=None):
+		return self.command("TIM:MODE", m, self._TIM)
+	
+	def windelay(self, t=None):
+		if(isinstance(t, str) and t.find("+") == -1) : t = int(t)
+		if(isinstance(t, int) or isinstance(t, float)) : t = "{:e}".format(t)
+		return self.command("TIM:POS", t)
+	
+	def winrange(self, t=None):
+		if(isinstance(t, str) and t.find("+") == -1) : t = int(t)
+		if(isinstance(t, int) or isinstance(t, float)) : t = "{:e}".format(t)
+		return self.command("TIM:RANGE", t)
+	
+	def zoomedwindelay(self, t=None):
+		if(isinstance(t, str) and t.find("+") == -1) : t = int(t)
+		if(isinstance(t, int) or isinstance(t, float)) : t = "{:e}".format(t)
+		return self.command("TIM:WIND:POS", t)
+	
+	def zoomedwinrange(self, t=None):
+		if(isinstance(t, str) and t.find("+") == -1) : t = int(t)
+		if(isinstance(t, int) or isinstance(t, float)) : t = "{:e}".format(t)
+		return self.command("TIM:WIND:RANGE", t)
+
+class MSO(Oscilloscope):
+	models = ["SCP", r"MSO\d\d\d\d[ABCD]?"]
+	acq_modes = ["AVE", "ENV", "SAM", "PEAK", "HIR"]
+	def __init__(self, name, adapter, **kwargs):
+		super(MSO, self).__init__(name, adapter, **kwargs)
+		self._maxsamplerate = self.ask("ACQuire:MAXSamplerate?")
+		self.ch1 = MSOChannel(1, adapter, self)
+		self.ch2 = MSOChannel(2, adapter, self)
+		self.ch3 = MSOChannel(3, adapter, self)
+		self.ch4 = MSOChannel(4, adapter, self)
+	
+	def autoscale(self):
+		self.write("AUT")
+
+	acq_mode = BaseInstrument.control("ACQ:MOD?",'FUNC "%s"', "FUNCTION",
 							strict_discrete_set, acq_modes)
 
 	def set_frequency_start_stop(self, start, stop):
-		self.write(':SENS1:FREQ:STAR ' + str(start))
-		self.write(':SENS1:FREQ:STOP ' + str(stop))
+		self.write(":SENS1:FREQ:STAR " + str(start))
+		self.write(":SENS1:FREQ:STOP " + str(stop))
 
 	def set_frequency_center_span(self, center, span=None):
-		self.write('SENS1:FREQ:CENT ' + str(center))
+		self.write("SENS1:FREQ:CENT " + str(center))
 		if not span == None:
-			self.write('SENS1:FREQ:SPAN ' + str(span))
+			self.write("SENS1:FREQ:SPAN " + str(span))
 
 	def set_sweep_parameters(self, number_of_points, power):
-		self.write(':SENS1:SWE:POIN ' + str(number_of_points))
-		self.write(':SOUR1:POW ' + str(power))
+		self.write(":SENS1:SWE:POIN " + str(number_of_points))
+		self.write(":SOUR1:POW " + str(power))
 
 	def set_averaging(self, enable, number_of_averages=None):
 		if enable:
-			scpi_parameter = 'ON'
+			scpi_parameter = "ON"
 		else:
-			scpi_parameter = 'OFF'
-		self.write(':SENS:AVER ' + scpi_parameter)
+			scpi_parameter = "OFF"
+		self.write(":SENS:AVER " + scpi_parameter)
 
 		if not number_of_averages == None:
-			self.write(':SENS:AVER:COUN ' + str(number_of_averages))
+			self.write(":SENS:AVER:COUN " + str(number_of_averages))
 
 	def restart_averaging(self):
-		self.write(':SENS:AVER:CLE')
+		self.write(":SENS:AVER:CLE")
 
-	def save_image(self, drive, filename, filetype = 'bmp'):
-		if(filetype in ['bmp', 'jpg', 'png']):
-			self.write('SAVE:IMAGE %s%s.%s' % (drive, filename, filetype))
+	def save_image(self, drive, filename, filetype = "bmp"):
+		if(filetype in ["bmp", "jpg", "png"]):
+			self.write("SAVE:IMAGE {}{}.{}".format(drive, filename, filetype))
 	
-	def save_setup(self, drive, filename, includerefs = 'OFF'):
-		self.write('SAVE:SETUP:INCLUDEREF %s' % (includerefs))
-		self.write('SAVE:SETUP %s%s.set' % (drive, filename))
+	def save_setup(self, drive, filename, includerefs = "OFF"):
+		self.write("SAVE:SETUP:INCLUDEREF {}".format(includerefs))
+		self.write("SAVE:SETUP {}{}.set".format(drive, filename))
 
+	
+	def display(self, ch, en=None):
+		return self.command("DIG{}:DISP".format(ch), en)
+	
+	def label(self, lbl = None):
+		if(lbl != None):
+			lbl = ("\"" + str(lbl) + "\"").upper()
+		return self.command("DIG{}:LAB".format(ch), lbl)
+	
+	def pos(self, p = None):
+		return self.command("DIG{}:POS".format(ch), p)
+	
+	def size(self, sz = None):
+		return self.command("DIG{}:SIZE".format(ch), sz, ["SMAL", "MED", "LARG"])
+	
+	def threshold(self, t = None):
+		if(t in ["MCOS", "ECL", "TTL"] or isinstance(t, int) or isinstance(t, float)) :
+			return self.command("DIG{}:POS".format(ch), t)

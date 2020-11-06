@@ -3,7 +3,7 @@ from Instruments.validators import truncated_range
 import numpy as np
 
 class SpecAnalyzer(Instrument):
-	models = ["SpA", "E440\dB"]
+	models = ["SpA", r"E440\dB"]
 	
 	def __init__(self, name, adapter, **kwargs):
 		super(SpecAnalyzer, self).__init__(name, adapter, **kwargs)

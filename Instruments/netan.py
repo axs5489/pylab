@@ -1,8 +1,8 @@
-from Instruments.instrument import Instrument
+from Instruments.instrument import Instrument, HPIBInstrument
 import numpy as np
 
 class NetAnalyzer(Instrument):
-	models = ["NA", "E507\dC"]
+	models = ["NA", r"E507\dC"]
 	def __init__(self, name, adapter, **kwargs):
 		super(NetAnalyzer, self).__init__(name, adapter, **kwargs)
 
@@ -126,3 +126,53 @@ class NetAnalyzer(Instrument):
 	def save_trace(self, filename):
 		np.savetxt(filename, self.get_trace(), delimiter='\t')
 		return 0
+
+
+class HP4396(HPIBInstrument):
+	models = ["NA", r"4396B"]
+	_MEAS = {'ref':'S11', 'fwd':'S21', 'bwd':'S12', 'rev':'S22'}
+	_TRG = {'free':'TRGS INT;CONT', 'hold':'T1', 'imm':'T2', 'delay':'T3'}
+	def __init__(self, name, adapter, **kwargs):
+		super(HP4396, self).__init__(name, adapter, **kwargs)
+		self._id = 'HP4396B'
+		self.premeas = "MEAS "
+	
+	def averaging(self, avg = None):
+		if(avg == None):
+			return int(self.query("AVER?".format(self.chnum)))
+		elif(avg in self._ONOFF):
+			self.write("AVER {}".format(avg))
+		else:
+			print("INVALID ENABLE for AVERAGE: ", avg)
+	
+	def format(self, f = "LOGM"):
+		if(f == "LOGM"):
+			self.write("FMT LOGM")
+		else:
+			self.write("FMT LIN")
+	
+	def marker(self, m = True):
+		if(m):
+			self.write('MKR ON')
+		else:
+			self.write('MKR OFF')
+	
+	def search(self, m = "MAX"):
+		if(m in self._LEVELS):
+			self.write('SEAM {}'.format(m))
+			return self.query("OUTPMKR?")
+	
+	def mode(self, m = "NA"):
+		if(m == "NA"):
+			self.write('NA')
+		else:
+			self.write('SA')
+
+	def set_frequency_start_stop(self, start, stop):
+		self.write('STAR ' + str(start))
+		self.write('STOP ' + str(stop))
+
+	def set_frequency_center_span(self, center, span=None):
+		self.write('CENT ' + str(center))
+		if(span != None):
+			self.write('SPAN ' + str(span))

@@ -5,22 +5,35 @@ class PSChannel(Channel):
 	def __init__(self, channel, adapter, parent, **kwargs):
 		super(PSChannel, self).__init__(channel, adapter, parent, **kwargs)
 
-class PS(ChannelizedInstrument):
-	models = ["PS", "GENH\d\d-\d\d"]
+class PS(Instrument):
+	models = ["PS"]
 	def __init__(self, name, adapter, **kwargs):
 		super(PS, self).__init__(name, adapter, **kwargs)
-		self.write('SYST:ERR:ENABLE')
 	
 	def close(self):
 		pass
 
-# 	mode = Instrument.control("SYST:SET %s", "SYST:SET?", "Output state, REM or LOC",
+class MCPS(PS, ChannelizedInstrument):
+	models = ["PS"]
+	def __init__(self, name, adapter, **kwargs):
+		super(PS, self).__init__(name, adapter, **kwargs)
+	
+	def close(self):
+		pass
+
+class LambdaPS(PS):
+	models = ["PS", r"GENH\d\d-\d\d"]
+	def __init__(self, name, adapter, **kwargs):
+		super(LambdaPS, self).__init__(name, adapter, **kwargs)
+		self.write('SYST:ERR:ENABLE')
+
+# 	mode = Instrument.control("SYST:SET?", "SYST:SET %s", "Output state, REM or LOC",
 # 							strict_discrete_set, ["REM", "LOC"])
-# 	output = Instrument.control("OUTP:STAT %s", "OUTP:STAT?", "Output state, ON or OFF",
+# 	output = Instrument.control("OUTP:STAT?", "OUTP:STAT %s", "Output state, ON or OFF",
 # 							strict_discrete_set, ["ON", "OFF"])
-# 	voltage = Instrument.control("VOLT %d", "VOLT?", "DC voltage, in Volts")
+# 	voltage = Instrument.control("VOLT?", "VOLT %d", "DC voltage, in Volts")
 # 	meas_voltage = Instrument.measurement("MEAS:VOLT?", "DC voltage, in Volts")
-# 	current = Instrument.control("CURR %d", "CURR?", "DC current, in Amps")
+# 	current = Instrument.control("CURR?", "CURR %d", "DC current, in Amps")
 # 	meas_current = Instrument.measurement("MEAS:CURR?", "DC current, in Amps")
 
 	def cmd_mode(self, mode=None):
@@ -54,6 +67,7 @@ class PS(ChannelizedInstrument):
 		else:
 			print("Output state (" + output + ") not in " + str(self._ONOFF))
 
+	curr = Instrument.control("MEAS:CURR?", "SOUR:CURR {}", "Current, Amps")
 	def current(self, c=None, meas=True):
 		if c == None:
 			if meas == True:
@@ -63,6 +77,7 @@ class PS(ChannelizedInstrument):
 		else:
 			self.write('SOUR:CURR ' + str(c))
 
+	volt = Instrument.control("MEAS:VOLT?", "SOUR:VOLT {}", "Voltage, Volts")
 	def voltage(self, v=None, meas=True):
 		if v == None:
 			if meas == True:
@@ -98,3 +113,73 @@ class PS(ChannelizedInstrument):
 
 	def tripped_OCP(self):
 		return self.ask('SOUR:CURR:PROT:TRIP?')
+		
+class XantrexPS(PS):
+	models = ["PS", r"HPD\d\d-\d\d"]
+	def __init__(self, name, adapter, **kwargs):
+		nm = ["Xantrex", name[1], name[2]]
+		super(XantrexPS, self).__init__(nm, adapter, **kwargs)
+
+	def clear(self):
+		""" Resets the instrument to power on state. """
+		self.write("CLR")
+
+	curr = Instrument.control("ISET?", "ISET {}", "Current, Amps")
+	def current(self, c=None):
+		if c == None:
+			return self.ask('ISET?')
+		else:
+			self.write('ISET ' + str(c))
+
+	def meascurrent(self):
+		return self.ask('IOUT?')
+
+	def maxcurrent(self, c=None):
+		if c == None:
+			return self.ask('IMAX?')
+		else:
+			self.write('IMAX ' + str(c))
+
+	def delay(self, t=None):
+		if t == None:
+			return self.ask('DLY?')
+		else:
+			self.write('DLY ' + str(t))
+
+	def fold(self, m=None):
+		if m == None:
+			return self.ask('FOLD?')
+		else:
+			self.write('FOLD ' + str(m))
+
+	def hold(self, m=None):
+		if m == None:
+			return self.ask('HOLD?')
+		elif m in self._ONOFF:
+			self.write('HOLD ' + str(m))
+		else:
+			print("Hold state (" + m + ") not in " + str(self._ONOFF))
+
+	def output_state(self, output=None):
+		if output == None:
+			return self.ask('OUT?')
+		elif output in self._ONOFF:
+			self.write('OUT ' + str(output))
+		else:
+			print("Output state (" + output + ") not in " + str(self._ONOFF))
+
+	def overvoltage(self, ov=None):
+		if ov == None:
+			return self.ask('OVSET?')
+		else:
+			self.write('OVSET ' + str(ov))
+
+	volt = Instrument.control("VSET?", "VSET {}", "Voltage, Volts")
+	def voltage(self, v=None):
+		if v == None:
+			return self.ask('VSET?')
+		else:
+			self.write('VSET ' + str(v))
+
+	def measvoltage(self):
+		return self.ask('VOUT?')

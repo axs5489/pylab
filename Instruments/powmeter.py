@@ -7,20 +7,20 @@ class PMChannel(Channel):
 	_SENSE = ["SENS1", "SENS2", "SENS1-SENS2", "SENS2-SENS1", "SENS1/SENS2", "SENS2/SENS1"]
 	def __init__(self, channel, adapter, parent, **kwargs):
 		super(PMChannel, self).__init__(channel, adapter, parent, **kwargs)
+		#self.pow = Channel.measurement("FETC{}?".format(self.chnum), "RF Power, W or dBm")
 	
 	def init(self):
 		return self.query("INIT{}".format(self.chnum))
 	
 	def autoattenuate(self):
-		p = self.power()
-		self.parent.powref = 1
 		self.offsetenable(0)
+		self.parent.powref = 1
 		time.sleep(1)
-		p = self.power()
+		p = self.powerStable()
 		self.offset(-p)
 		self.offsetenable(1)
 		time.sleep(1)
-		p = self.power()
+		p = self.powerStable()
 		self.parent.powref = 0
 		return True if (p < 0.015 and p > -0.015) else False
 	
@@ -54,11 +54,11 @@ class PMChannel(Channel):
 			
 	def powerStable(self, timeout = 10, delay = 0.1, maxtol = 0.05):
 		stable = 0
-		lastpwr = self.value("FETC?")
+		lastpwr = self.power()
 		start_time = time.time()
 		while (time.time() - start_time) < timeout:
 			time.sleep(delay)
-			pwr = self.value("FETC?")
+			pwr = self.power()
 			if(abs(pwr - lastpwr) < maxtol) :
 				stable += 1
 			else: stable = 0
@@ -146,7 +146,7 @@ class PMChannel(Channel):
 			print("INVALID LIMITS: ", lim)
 		
 class PowerMeter(RFInstrument, ChannelizedInstrument):
-	models = ["PM", "E441[89]B"]
+	models = ["PM", r"E441[89]B"]
 	SCmodels = ["E4418B"]
 	MCmodels = ["E4419B"]
 	_MATH = ["A", "B", "A-B", "B-A", "A/B", "B/A"]
@@ -158,14 +158,14 @@ class PowerMeter(RFInstrument, ChannelizedInstrument):
 				print("Dual Channel Power Meter Detected!")
 				self._num_channels = 2
 				self.ch2 = PMChannel(2, adapter, self)
-				readDIF = Instrument.measurement("READ:DIF?", "Power difference, in dB or W")
-				readRAT = Instrument.measurement("READ:DIF?", "Power ratio, in dB")
+				self.readDIF = Instrument.measurement("READ:DIF?", "Power difference, in dB or W")
+				self.readRAT = Instrument.measurement("READ:DIF?", "Power ratio, in dB")
 		except:
 			print("PowerMeter Exception: 2nd channel initialization")
 	
 	def close(self):
-		ChannelizedInstrument.close()
-		self.ch1 = None
+		#ChannelizedInstrument.close(self)
+		del self.ch1
 		if(self._num_channels == 2):
 			self.ch2.close()
 			self.ch2 = None

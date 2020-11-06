@@ -5,14 +5,25 @@ import visa
 from Adapters.adapter import FakeAdapter
 from Adapters.visa import VISAAdapter
 
-def splitResourceID(idn, debugOn = False):
+def splitResourceID(idn, dlm=',', debugOn = False):
 	try:
-		ci1 = idn.index(',')
-		ci2 = idn.index(',', ci1 + 1)
-		ci3 = idn.index(',', ci2 + 1)
-		mfg = idn[0:ci1].strip()
-		mdl = idn[ci1+1 : ci2].strip()
-		sn = idn[ci2+1 : ci3].strip()
+		if(dlm == ','):
+			ci1 = idn.find(dlm)
+			if(ci1 == -1):
+				dlm = ' '
+			else:
+				ci2 = idn.find(dlm, ci1 + 1)
+				ci3 = idn.find(dlm, ci2 + 1)
+				mfg = idn[0:ci1].strip()
+				mdl = idn[ci1+1 : ci2].strip()
+				sn = idn[ci2+1 : ci3].strip()
+		if(dlm == ' '):
+			ci1 = idn.find(dlm)
+			ci2 = idn.find(dlm, ci1 + 1)
+			mfg = ''
+			mdl = idn[ci1+1 : ci2].strip()
+			sn = idn[ci2+1 : ].strip()
+			
 	except ValueError:
 		print("IDN is in improper format")
 		return None
@@ -42,16 +53,16 @@ class BaseInstrument():
 				except visa.VisaIOError as e:
 					print("Visa IO Error: check connections")
 					print(e)
-				
 		except ImportError:
 			raise Exception("Invalid Adapter provided for Instrument since PyVISA is not present")
+		
 		self._name = name
 		self._adapter = adapter
 		self._active = True
 		
 	def close(self):
 		self._name = None
-		if(hasattr(self._adapter,"close")):
+		if(hasattr(self, "_adapter") and hasattr(self._adapter,"close")):
 			self._adapter.close()
 		self._adapter = None
 		self._active = None
@@ -76,7 +87,13 @@ class BaseInstrument():
 		try:
 			return self._adapter.ask("*IDN?").strip()
 		except:
-			return "Warning: Identification error."
+			try:
+				return self._adapter.ask("ID?").strip()
+			except:
+				if(hasattr(self, "_id")):
+					return self._id
+				else:
+					return "Warning: Identification error."
 
 	# Wrapper functions for the Adapter object
 	def ask(self, command):
@@ -91,6 +108,17 @@ class BaseInstrument():
 	def read(self):
 		""" Returns read response from instrument through its adapter. """
 		return self._adapter.read()
+
+	def readBytes(self, size, dec = False):
+		""" Returns read response from instrument through its adapter. """
+		bs = self._adapter.read_bytes(size)
+		if dec:
+			try:
+				return float(bs)
+			except:
+				return bs
+		else:
+			return bs
 
 	def value(self, command, **kwargs):
 		""" Reads a value from the instrument through the adapter. """
@@ -113,6 +141,24 @@ class BaseInstrument():
 	def clear(self):
 		""" Clears the instrument status byte """
 		self.write("*CLS")
+	
+	def command(self, cmd, value=None, validator=None):
+		if(value is None):
+			print("{}?".format(cmd))
+			return self.ask("{}?".format(cmd))
+		else:
+			print("{} {}".format(cmd, value))
+			if(validator is None):
+				if(isinstance(value, str)):
+					return self.write("{} {}".format(cmd, value))
+				elif(value):
+					return self.write("{} ON".format(cmd))
+				else:
+					return self.write("{} OFF".format(cmd))
+			elif(value in validator):
+				return self.write("{} {}".format(cmd, value))
+			else:
+				raise ValueError("Invalid {} command {} with value {}".format(self, cmd, value))
 
 	def command_state(self, command, bool):
 		state = 'ON' if bool else 'OFF'
@@ -124,6 +170,10 @@ class BaseInstrument():
 	def reset(self):
 		""" Resets the instrument. """
 		self.write("*RST")
+
+	def wait(self):
+		""" Instructs the instrument to wait. """
+		self.write("*WAI")
 
 	@staticmethod
 	def control(get_command, set_command, docs,
@@ -190,7 +240,7 @@ class BaseInstrument():
 					'Values of type `{}` are not allowed '
 					'for Instrument.control'.format(type(values))
 				)
-			self.write(set_command % value)
+			self.write(set_command.format(value))
 			if check_set_errors:
 				self.check_errors()
 
@@ -292,7 +342,7 @@ class BaseInstrument():
 					'Values of type `{}` are not allowed '
 					'for Instrument.control'.format(type(values))
 				)
-			self.write(set_command % value)
+			self.write(set_command.format(value))
 			if check_set_errors:
 				self.check_errors()
 
@@ -302,8 +352,44 @@ class BaseInstrument():
 		return property(fget, fset)
 
 
+class HPIBInstrument(BaseInstrument):
+	""" Class for old HPIB equipment that don't follow the SCPI standard. """
+	_MEAS = {}
+	_TRG = {'free':'T0', 'hold':'T1', 'imm':'T2', 'delay':'T3'}
+
+	def __init__(self, name, adapter, **kwargs):
+		super(HPIBInstrument,self).__init__(name, adapter, **kwargs)
+		self.measurement = None
+		self.premeas = ""
+		self.reset()
+		self.auto()
+		self.trigger()
+	
+	def auto(self):
+		self.write('AU')
+
+	def id(self):
+		""" Override base class implementation since this instrument does not have the standard '*IDN?' command """
+		return self._id
+		
+	def measure(self,type=None):
+		if(type == None):
+			return self.measurement
+		else:
+			cmdString = self._MEAS[type.lower()]
+			self.measurement = type
+			self.write(self.premeas + cmdString)
+	
+	def reset(self):
+		self.write('CL')
+		
+	def trigger(self, mode='free'):
+		""" Method to trigger """
+		self.write(self._TRG[mode])
+
+
 class Instrument(BaseInstrument):
-	""" Intermediate class for equipment with multiple channels. """
+	""" Intermediate class for equipment, implementing common SCPI commands. """
 
 	def __init__(self, name, adapter, **kwargs):
 		super(Instrument,self).__init__(str(name), adapter, **kwargs)
@@ -322,6 +408,11 @@ class Instrument(BaseInstrument):
 		#print(self.status())
 		#self.beep()
 		#self.recover(True)
+
+	def interact(self, tad = 31, lad = 31):
+		""" Instructs the instrument to talk to/listen from a certain address. 31 is is the Unlisten/Untalk address """
+		self.write("TAD {}".format(tad))
+		self.write("LAD {}".format(lad))
 
 	def beep(self):
 		""" Clears the instrument status byte """
@@ -379,7 +470,7 @@ class Instrument(BaseInstrument):
 	def shutdown(self):
 		"""Brings the instrument to a safe and stable state"""
 		self.isShutdown = True
-		print("Shutting down %s" % self._name)
+		print("Shutting down %s".format(self._name))
 
 	def status(self):
 		return self.ask("*STAT")
@@ -394,40 +485,6 @@ class Instrument(BaseInstrument):
 
 	def wait(self):
 		return self.write("*WAI")
-		
-
-class FakeInstrument(Instrument):
-	""" Fake implementation for testing purposes. """
-
-	def __init__(self, name=None, adapter=None, **kwargs):
-		super().__init__(name or "Fake Instrument", FakeAdapter(), **kwargs)
-
-	@staticmethod
-	def control(get_command, set_command, docs, validator=lambda v, vs: v, values=(), map_values=False,
-				get_process=lambda v: v, set_process=lambda v: v, check_set_errors=False, check_get_errors=False,
-				**kwargs):
-		"""Fake Instrument.control.
-
-		Strip commands and only store and return values indicated by
-		format strings to mimic many simple commands.
-		This is analogous how the tests in test_instrument are handled.
-		"""
-
-		# Regex search to find first format specifier in the command
-		fmt_spec_pattern = r'(%[\w.#-+ *]*[diouxXeEfFgGcrsa%])'
-		match = re.search(fmt_spec_pattern, set_command)
-		if match:
-			format_specifier = match.group(0)
-		else:
-			format_specifier = ''
-		# To preserve as much functionality as possible, call the real
-		# control method with modified get_command and set_command.
-		return Instrument.control(get_command="", set_command=format_specifier,
-								  docs=docs, validator=validator,
-								  values=values, map_values=map_values,
-								  get_process=get_process, set_process=set_process,
-								  check_set_errors=check_set_errors,
-								  check_get_errors=check_get_errors, **kwargs)
 
 
 class Channel(BaseInstrument):
@@ -445,6 +502,68 @@ class Channel(BaseInstrument):
 	
 	def getChannel(self):
 		return self.chnum
+	
+	def command(self, cmd, value=None, validator=None):
+		if(hasattr(self,'preamble')):
+			msg = self.preamble + cmd
+			if(value is None):
+				print("{}?".format(msg))
+				return self.ask("{}?".format(msg))
+			else:
+				print("{} {}".format(msg, value))
+				if(validator is None):
+					if(isinstance(value, str)):
+						return self.write("{} {}".format(msg, value))
+					elif(value):
+						return self.write("{} ON".format(msg))
+					else:
+						return self.write("{} OFF".format(msg))
+				elif(value in validator):
+					return self.write("{} {}".format(msg, value))
+				else:
+					raise ValueError("Invalid {} command {} with value {}".format(self, msg, value))
+		else:
+			raise ValueError("{} has no preamble".format(self))
+	
+	def control(self, getcmd, setcmd, docs):
+		def fget(self):
+			vals = self.values(getcmd.format(self.chnum), **kwargs)
+			if len(vals) == 1:
+				return vals[0]
+			else:
+				return vals
+
+		def fset(self, value):
+			#value = validator(value, values)
+			self.write(setcmd.format(self.chnum, value))
+
+		# Add the specified document string to the getter
+		fget.__doc__ = docs
+		return property(fget, fset)
+	
+	def measurement(self, getcmd, docs):
+		def fget(self):
+			vals = self.values(getcmd.format(self.chnum), **kwargs)
+			if len(vals) == 1:
+				return vals[0]
+			else:
+				return vals
+
+		# Add the specified document string to the getter
+		fget.__doc__ = docs
+		return property(fget)
+	
+	def setting(self, setcmd, docs):
+		def fget(self):
+			raise LookupError("Channel.setting properties can not be read.")
+
+		def fset(self, value):
+			#value = validator(value, values)
+			self.write(setcmd.format(self.chnum, value))
+
+		# Add the specified document string to the getter
+		fget.__doc__ = docs
+		return property(fget, fset)
 	
 class ChannelizedInstrument(Instrument):
 	""" Class for equipment with channels. """
@@ -488,18 +607,22 @@ class ChannelizedInstrument(Instrument):
 			print("Invalid index {} for Instrument Channel {}".format(ind, ch))
 		
 	
-class HPIBInstrument(Instrument):
-	""" Class for equipment with Math capabilities. """
+class ConfiguredInstrument(Instrument):
+	""" Class for equipment that can save/recall configurations. """
 
 	def __init__(self, name, adapter, **kwargs):
-		super(MathInstrument,self).__init__(name, adapter, **kwargs)
+		super(ConfiguredInstrument,self).__init__(name, adapter, **kwargs)
 
-	def id(self):
-		""" Override VisaDevice base class implementation since this instrument does not have the standard '*IDN?' command """
-		return self._id
+	def addr(self, gpib = 31):
+		""" Instructs the instrument to talk to/listen from a certain address. 31 is is the Unlisten/Untalk address """
+		self.write("SYST:COMM:GPIB:ADDR {}".format(gpib))
+		self.write('*SAV 0')
 	
-	def reset(self):
-		self.write('CL')
+	def recall(self):
+		self.write('RCL')
+	
+	def save(self):
+		self.write('SAV')
 	
 class MathInstrument(Instrument):
 	""" Class for equipment with Math capabilities. """

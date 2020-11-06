@@ -1,159 +1,257 @@
 from Instruments.instrument import Instrument
 import numpy as np
-import urllib.request
+import time
 
 class FireBERD(Instrument):
 	models = ["FB"]
 	def __init__(self, name, adapter, **kwargs):
 		super(FireBERD, self).__init__(name, adapter, **kwargs)
-		try:
-			self.dev
-		except:
-			pass
-	
-	def fetchPower(pm, debugOn = False):
-		if debugOn : print("*** FETCH ****")
-		pwr = float(power_meter.query("FETC?"))
-		if debugOn : print("POWER: ", pwr)
-		return pwr
+		self.write('\x03') # Initialize the COM port
 
-	def fetchStablePower(pm, delay = 1, debugOn = False):
-		stable = 0
-		maxtol = 0.1
-		attempts = 0
-		maxattempts = 200
-		lastpwr = float(power_meter.query("FETC?"))
-		while(attempts < maxattempts) :
-			time.sleep(delay)
-			pwr = float(power_meter.query("FETC?"))
-			dev = abs(pwr - lastpwr)/pwr
-			if(dev < maxtol) :
-				stable += 1
-			if(stable == 5) : return pwr
-			lastpwr = pwr
-		
-	
-	def set_frequency_start_stop(self, start, stop):
-		self.write(':SENS1:FREQ:STAR ' + str(start))
-		self.write(':SENS1:FREQ:STOP ' + str(stop))
+	def close(self):
+		self.rts(False) # unkey before closing
+		super(Fireberd6000A,self).close()
 
-	def set_frequency_center_span(self, center, span=None):
-		self.write('SENS1:FREQ:CENT ' + str(center))
-		if not span == None:
-			self.write('SENS1:FREQ:SPAN ' + str(span))
+	def reset(self):
+		self.rts(False)
+		self.write('RESULT:RESTART')
+		self.write('*CLS')		
 
-	def set_sweep_parameters(self, number_of_points, power):
-		self.write(':SENS1:SWE:POIN ' + str(number_of_points))
-		self.write(':SOUR1:POW ' + str(power))
+	def restart(self):
+		self.write('RESULT:RESTART')
 
-	def set_averaging(self, enable, number_of_averages=None):
-		if enable:
-			scpi_parameter = 'ON'
+	def rts(self,on=None):
+		if on is not None:
+			self.write('CONFIG:RTS %s'%('ON' if on else 'OFF'))
+			time.sleep(1)
 		else:
-			scpi_parameter = 'OFF'
-		self.write(':SENS:AVER ' + scpi_parameter)
+			result = self.query('CONFIG:RTS?')
+			return {'ON':True,'OFF':False}[result]
 
-		if not number_of_averages == None:
-			self.write(':SENS:AVER:COUN ' + str(number_of_averages))
+	def tpz(self,on=None):
+		if on is not None:
+			self.write('CONFIG:TPZ %s'%('ON' if on else 'OFF'))
+			time.sleep(0.5)
+		else:
+			result = self.query('CONFIG:TPZ?')
+			return {'ON':True,'OFF':False}[result]
+		
+	## config
 
-	def restart_averaging(self):
-		self.write(':SENS:AVER:CLE')
+	def genDataInv(self,invert=None):
+		if invert is not None:
+			self.write('AUX:GEN_DATA_INV %s'%('ON' if invert else 'OFF'))
+		else:
+			result = self.query('AUX:GEN_DATA_INV?')
+			return {'ON':True,'OFF':False}[result]
 
-	def get_sweep_time(self):
-		return float(self.ask(':SENS1:SWE:TIME?'))
+	Patterns = [ 'MARK', '1:1', '63', '511', '2047', '2^15-1', '2^20-1', '2^23-1', 
+				 'QRSS', 'PRGM', 'FOX', 'USER' ]
+	def pattern(self,pattern=None):
+		if pattern is not None:
+			if pattern not in Fireberd6000A.Patterns:
+				raise Exception('Invalid Pattern: %s'%pattern)
+			self.write('CONFIG:PATTERN %s'%pattern)
+		else:
+			result = self.query('CONFIG:PATTERN?')
+			if result not in Fireberd6000A.Patterns:
+				raise Exception('Invalid Pattern: %s'%result)
+			return result
 
-	def configure_display_scale(self, reference_value, reference_position=None,
-								number_of_divisions=None, scale_per_division=None):
-		self.write('DISP:WIND1:TRAC1:Y:RLEV ' + str(reference_value))
+	def prgmPattern(self,pattern=None):
+		if pattern is not None:
+			self.write('AUX:PRGM_PATTERN %s'%pattern)
+		else:
+			result = self.query('AUX:PRGM_PATTERN?')
+			return result
 
-		if not reference_position == None:
-			self.write('DISP:WIND1:TRAC1:Y:RPOS ' + str(reference_position))
+	def blockLen(self,length=None):
+		if length is not None:
+			self.write('AUX:BLOCK_LEN %d'%length)
+		else:
+			result = self.query('AUX:BLOCK_LEN?')
+			return int(result)
 
-		if not number_of_divisions == None:
-			self.write('DISP:WIND1:Y:DIV ' + str(number_of_divisions))
+	## results
 
-		if not scale_per_division == None:
-			self.write('DISP:WIND1:TRAC1:Y:PDIV ' + str(scale_per_division))
+	def ber(self):
+		result = self.query('RESULT? BER')
+		return float(result)
 
-	def set_background_color(self, red, green, blue):
-		''' Colors are integers of range 0 through 5'''
-		self.write('DISP:COL:BACK ' + str(red) + ',' + str(green) + ',' + str(blue))
+	def avgBer(self):
+		result = self.query('RESULT? AVG_BER')
+		return float(result)
+		
+	def bitErrors(self):
+		result = self.query('RESULT? BIT_ERRS')
+		return int(result)
 
-	def set_graticule_color(self, red, green, blue):
-		''' Colors are integers of range 0 through 5'''
-		self.write('DISP:COL:GRAT ' + str(red) + ',' + str(green) + ',' + str(blue))
+	def patSlips(self):
+		result = self.query('RESULT? PAT_SLIP')
+		return int(result)
 
-	def set_grid_color(self, red, green, blue):
-		''' Colors are integers of range 0 through 5'''
-		self.write('DISP:COL:GRAT2 ' + str(red) + ',' + str(green) + ',' + str(blue))
+	def clkLoss(self):
+		result = self.query('RESULT? CLK_LOSS')
+		return int(result)
 
-	def get_bandwidth_measure(self, dB_down=None):
-		self.write(':CALC1:MARK1:BWID ON')
-		if not dB_down == None:
-			self.write(':CALC1:MARK1:BWID:THR ' + str(dB_down))
-		return [float(i) for i in (self.ask(':CALC1:MARK:BWID:DATA?').split(','))]
+	def patLoss(self):
+		result = self.query('RESULT? PAT_LOSS')
+		return int(result)
 
-	def peak_search(self):
-		''' Enable peak search, find peak, and return X and Y positions'''
-		self.write(':CALC:MARK1:FUNC:TYPE PEAK')
-		self.write(':CALC:MARK1:FUNC:EXEC')
-		return float(self.ask(':CALC:MARK1:X?')), float(self.ask(':CALC:MARK1:Y?').split(',')[0])
+	def blocks(self):
+		result = self.query('RESULT? BLOCKS')
+		return int(result)
 
-	def max_search(self, marker=None):
-		''' Enable max search, find max, and return X and Y positions'''
-		if marker == None:
-			marker = 1
+	def genFreq(self):
+		result = self.query('RESULT? GEN_FREQ')
+		try:
+			return float(result.replace('"',''))
+		except:
+			return 0.0
 
-		marker_text = 'MARK' + str(marker)
+	def rcvFreq(self):
+		result = self.query('RESULT? RCV_FREQ')
+		try:
+			return float(result.replace('"',''))
+		except:
+			return 0.0
 
-		self.write(':CALC:' + marker_text + ' ON')
-		self.write(':CALC:' + marker_text + ':FUNC:TYPE MAX')
-		self.write(':CALC:' + marker_text + ':FUNC:EXEC')
+	def elapsedTime(self):
+		result = self.query('RESULT? ELAP_SEC')
+		return int(result)
 
-		return (float(self.ask(':CALC:' + marker_text + ':X?')),
-				float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0]))
+	# status
 
-	def min_search(self, marker=None):
-		'''Enable min search, find min, and return X and Y positions'''
-		if marker == None:
-			marker = 1
+	# STATUS:LINE? Query returns an 8 bit register:
+	# bit 8 (MSB): Not used, always 0
+	# bit 7: TEST COMPLETE
+	# bit 6: RCV CLK INV (True when inverted clock is received)
+	# bit 5: RCV DATA INV (True when inverted data is received)
+	# bit 4: GEN CLK PRES (True when generated clock is present)
+	# bit 3: PATTERN SYNC
+	# bit 2: FRAME SYNC
+	# bit 1 (LSB): SIGNAL PRESENT
 
-		marker_text = 'MARK' + str(marker)
+	# STATUS:INTF? Query returns an 8 bit register:
+	# bit 8 (MSB): Not used, always 0
+	# bit 7: Not used, always 0
+	# bit 6: DSR/DTR (User assertable in DTE emulation)
+	# bit 5: RLSD/RTS (User assertible in DTE emulation)
+	# bit 4: RL/TM
+	# bit 3: LL/CTS
+	# bit 2: DTR/DSR (User assertable in DCE emulation)
+	# bit 1 (LSB): RTS/RLSD (User assertable in DCE emulation)
 
-		self.write(':CALC:' + marker_text + ' ON')
-		self.write(':CALC:' + marker_text + ':FUNC:TYPE MIN')
-		self.write(':CALC:' + marker_text + ':FUNC:EXEC')
+	def rlsd(self):
+		result = self.query('STATUS:INTF?')
+		flag = int(result) & 0x01
+		return flag>0
 
-		return (float(self.ask(':CALC:' + marker_text + ':X?')),
-				float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0]))
+	def sigPres(self):
+		result = self.query('STATUS:LINE?')
+		flag = int(result) & 0x01
+		return flag>0
 
+	def patSync(self):
+		result = self.query('STATUS:LINE?')
+		flag = int(result) & 0x04
+		return flag>0
 
-	def get_trace(self):
-		freqList = [float(i) for i in self.ask(':SENS1:FREQ:DATA?').split(',')]
-		amplList = [float(i) for i in self.ask(':CALC1:DATA:FDAT?').split(',')[::2]]
-		return np.transpose([freqList, amplList])
+	def dataInv(self):
+		result = self.query('STATUS:LINE?')
+		flag = int(result) & 0x10
+		return flag>0
 
-	def set_marker(self, freq, marker=None):
-		if marker == None:
-			marker = 1
+	def cts(self):
+		result = self.query('STATUS:INTF?')
+		flag = int(result) & 0x04
+		return flag>0
 
-		marker_text = 'MARK' + str(marker)
+	def genClk(self):
+		result = self.query('STATUS:LINE?')
+		flag = int(result) & 0x08
+		return flag>0
 
-		self.write(':CALC:' + marker_text + ':X ' + str(freq))
-		return float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0])
+	# overrides
 
-	def get_marker_value(self, marker=None):
-		if marker == None:
-			marker = 1
+	def write(self, msg, readErrors=True):
+		super(Fireberd6000A,self).write(msg, readErrors)
+		self.read() # get the echo
 
-		marker_text = 'MARK' + str(marker)
+	def read(self, returnType='string'):
+		# Override 
+		result = super(Fireberd6000A,self).read(returnType)
+		return result.strip().encode('utf8')
 
-		return float(self.ask(':CALC:' + marker_text + ':Y?').split(',')[0])
+### UNIT TEST ##################################################################
+if __name__ == '__main__':
+	fireberd = Fireberd6000A('ASRL17::INSTR')
 
-	def save_trace(self, filename):
-		np.savetxt(filename, self.get_trace(), delimiter='\t')
-		return 0
+	fireberd.reset()
 
-	def save_screen(self, filename):
-		urllib.request.urlretrieve('http://' + self.host + '/image.asp', filename)
-		urllib.request.urlretrieve('http://' + self.host + '/disp.png', filename)
+	fireberd.rts(True)
+	print('rts',fireberd.rts())
+	time.sleep(1)
+	fireberd.rts(False)
+	print('rts',fireberd.rts())
+
+	print('### Config...')
+	print('genDataInv',fireberd.genDataInv())
+	try:
+		fireberd.pattern('123')
+	except Exception as e:
+		print(e)
+	fireberd.pattern('63')
+	print('pattern',fireberd.pattern())
+	print('prgmPattern',fireberd.prgmPattern())
+
+	print('')
+	print('### Results...')
+	print('ber',fireberd.ber())
+	print('avgBer',fireberd.avgBer())
+	print('bitErrors',fireberd.bitErrors())
+	print('patSlips',fireberd.patSlips())
+	print('clockLoss',fireberd.clockLoss())
+	print('patLoss',fireberd.patLoss())
+	print('blocks',fireberd.blocks())
+	print('genFreq',fireberd.genFreq())
+	print('rcvFreq',fireberd.rcvFreq())
+	print('elapsedTime',fireberd.elapsedTime())
+
+	print('')
+	print('### Status...')
+	print('rlsd',fireberd.rlsd())
+	print('sigPres',fireberd.sigPres())
+	print('patSync',fireberd.patSync())
+	print('dataInv',fireberd.dataInv())
+	print('cts',fireberd.cts())
+	print('genClk',fireberd.genClk())
+
+	print('')
+	print('### Test...')
+	fireberd.rts(True)
+	print('rts',fireberd.rts())
+	fireberd.restart()
+	time.sleep(2)
+
+	print('')
+	print('ber',fireberd.ber())
+	print('avgBer',fireberd.avgBer())
+	print('bitErrors',fireberd.bitErrors())
+	print('patSlips',fireberd.patSlips())
+	print('clockLoss',fireberd.clockLoss())
+	print('patLoss',fireberd.patLoss())
+	print('blocks',fireberd.blocks())
+	print('genFreq',fireberd.genFreq())
+	print('rcvFreq',fireberd.rcvFreq())
+	print('elapsedTime',fireberd.elapsedTime())
+
+	print('')
+	print('rlsd',fireberd.rlsd())
+	print('sigPres',fireberd.sigPres())
+	print('patSync',fireberd.patSpythnync())
+	print('dataInv',fireberd.dataInv())
+	print('cts',fireberd.cts())
+	print('genClk',fireberd.genClk())
+
+	fireberd.rts(False)
