@@ -16,9 +16,9 @@ from Instruments.instrument import splitResourceID
 from Instruments.gps import GSG
 from Instruments.netan import NetAnalyzer
 from Instruments.powmeter import PowerMeter#, DualPowerMeter
-from Instruments.powsupply import PS
+from Instruments.powsupply import PS, XantrexPS
 from Instruments.rfswitch import rfSW
-from Instruments.scope import Oscilloscope
+from Instruments.scope import DSO, MSO
 from Instruments.specan import SpecAnalyzer
 import Radio.radio
 from Radio.radio import Console, Channel, Radio
@@ -29,8 +29,8 @@ import visa
 
 adu_types = ["ADU"]
 com_types = ["CON", "STP", "RCP", "RED", "BLK", "RUT", "BUT", "RFSW"]
-res_types = [AudioAnalyzer, ArbGen, DMM, FireBERD, FreqCounter, ModulationAnalyzer, 
-			NetAnalyzer, PowerMeter, PS, rfSW, SigGen, GSG, SpecAnalyzer, Oscilloscope]
+res_types = [AudioAnalyzer, ArbGen, DMM, FireBERD, FreqCounter, ModulationAnalyzer, NetAnalyzer, 
+			PowerMeter, PS, XantrexPS, DSO, MSO, rfSW, SigGen, GSG, SpecAnalyzer]
 
 
 class Station():
@@ -163,6 +163,8 @@ class Station():
 		res = self._rm.open_resource(addr)
 		try:
 			idn = res.query('*idn?')[:-1]
+			if(idn == ''):
+				idn = res.query('ID?')
 			mm = splitResourceID(idn)
 			resadptr = VISAAdapter(mm[1], res)
 			if self._debugOn : print("\t", addr, ":", idn)

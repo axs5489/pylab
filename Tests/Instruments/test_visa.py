@@ -13,29 +13,35 @@ from Instruments.freqcount import FreqCounter
 from Instruments.generators import SigGen, ArbGen
 from Instruments.gps import GSG
 from Instruments.instrument import splitResourceID
-from Instruments.netan import NetAnalyzer
+from Instruments.netan import NetAnalyzer, HP4396
 from Instruments.powmeter import PowerMeter#, DualPowerMeter
-from Instruments.powsupply import PS
+from Instruments.powsupply import PS, LambdaPS, XantrexPS
 from Instruments.rfswitch import rfSW
-from Instruments.scope import Oscilloscope
+from Instruments.scope import DSO, MSO
 from Instruments.specan import SpecAnalyzer
 from Radio.radio import Console, Channel, Radio
 from Utilities import devmngr, win
 import visa
 
 
-instruments = [AudioAnalyzer, ArbGen, DMM, FireBERD, FreqCounter, ModulationAnalyzer, 
-			NetAnalyzer, PowerMeter, PS, rfSW, SigGen, GSG, SpecAnalyzer, Oscilloscope]
+instruments = [AudioAnalyzer, ArbGen, DMM, FireBERD, FreqCounter, ModulationAnalyzer, NetAnalyzer, HP4396, 
+			PowerMeter, PS, LambdaPS, XantrexPS, DSO, MSO, rfSW, SigGen, GSG, SpecAnalyzer]
 addr_cnt = "GPIB0::14::INSTR"
-addr_dmm = None#"GPIB0::7::INSTR"
+addr_dmm = "GPIB0::7::INSTR"
+addr_na = "GPIB0::17::INSTR"
 addr_pm = "GPIB0::13::INSTR"
+addr_ps2 = "GPIB0::5::INSTR"
 addr_ps = "GPIB0::6::INSTR"
 addr_sa = "GPIB0::18::INSTR"
-addr_list = [addr_dmm,
-			addr_cnt,
+addr_scp = 'USB0::0x0957::0x1755::MY48260116::INSTR'
+addr_list = [#addr_cnt,
+			#addr_dmm,
+			addr_na,
 			addr_pm,
 			addr_ps,
-			addr_sa
+			#addr_ps2,
+			addr_sa,
+			addr_scp
 			 ]
 
 res = {}
@@ -47,7 +53,10 @@ for addr in addr_list:
 	if(addr is not None):
 		try:
 			r = rm.open_resource(addr)
-			mm = splitResourceID(r.query('*idn?')[:-1])
+			idn = r.query('*idn?')[:-1]
+			if(idn == ''):
+				idn = r.query('ID?')
+			mm = splitResourceID(idn)
 			print(mm)
 			for cl in instruments:
 				sup = cl.checkSupport(mm[1])
@@ -65,12 +74,21 @@ for k,v in res.items():
 		cnt = res[k][2]
 	elif(k == addr_dmm):
 		dmm = res[k][2]
+	elif(k == addr_na):
+		na = res[k][2]
 	elif(k == addr_pm):
 		pm = res[k][2]
 	elif(k == addr_ps):
 		ps = res[k][2]
+	elif(k == addr_ps2):
+		ps2 = res[k][2]
 	elif(k == addr_sa):
 		sa = res[k][2]
+	elif(k == addr_scp):
+		scp = res[k][2]
 	print(v[0])
 	for i in instruments:
-		print(i.checkSupport(v[0][1]))
+		spt = i.checkSupport(v[0][1])
+		if spt:
+			print(spt)
+			break

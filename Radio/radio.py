@@ -107,9 +107,13 @@ class Console():
 		self.send(cmd)
 		return self.flush()
 	
-	def send_and_wait(self, cmd = "", prompt="", timeout = 5, useRegex=False, caseSensitive=False):
+	def send_and_wait(self, cmd = "\n", prompt="#", timeout = 5, useRegex=False, caseSensitive=False):
 		self.send(cmd)
 		return self.handle.waitFor(prompt, timeout, False, useRegex, caseSensitive)
+	
+	def send_and_timeout(self, cmd = "\n", prompt="#", timeout = 5, useRegex=False, caseSensitive=False):
+		self.send(cmd)
+		return self.handle.waitFor(prompt, timeout, True, useRegex, caseSensitive)
 	
 	def waitFor(self, waitStr = "#"):
 		return self.handle.waitFor(waitStr, 10, False)

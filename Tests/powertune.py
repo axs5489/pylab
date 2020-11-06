@@ -8,7 +8,7 @@ Created on Thu Feb 12 12:29:52 2020
 from Adapters.visa import VISAAdapter
 from Instruments.instrument import splitResourceID
 from Instruments.powmeter import PowerMeter
-from Instruments.powsupply import PS
+from Instruments.powsupply import LambdaPS
 from Radio.radio import Console, Channel, Radio
 from Tests.test import Test
 #import Utilities.Station
@@ -31,6 +31,10 @@ class PowerTune(Test):
 		self.config()
 		self.configPower()
 		self.calibrate()
+		try:
+			self._blk.send_and_timeout("\n", '#')
+		except:
+			self._ch.clean()
 	
 	def close(self):
 		self._name = None
@@ -56,17 +60,15 @@ class PowerTune(Test):
 		self.close()
 	
 	def calibrate(self):
-		self._pm.ch1.freq(300000000)
-		print("You need to calibrate the Power Meter Sensor!")
-		res = input()
+		res = input("You need to calibrate the Power Meter Sensor!  ")
 		if(res.upper() != 'N') : self._pm.ch1.calibrate(1)
-		print("You need to set the Power Meter attenuator offset!")
-		res = input()
-		if(res.upper() != 'N') : self._pm.ch1.autoattenuate()
-		self._atten = self._pm.ch1.offset()
-		print("Offset: ", self._atten)
-		print("Power Meter Calibrated!")
-		input()
+		res = input("You need to set the Power Meter attenuator offset!  ")
+		while(res.upper() != 'N') :
+			 self._pm.ch1.autoattenuate()
+			 self._atten = self._pm.ch1.offset()
+			 print("Offset: ", self._atten)
+			 res = input("Repeat?  ")
+		input("Power Meter Calibrated!  ")
 	
 	def config(self, tuneNB=True, tuneWB=True, tuneMUOS=True, reissue=True, timeout=20):
 		self._tuneNB = tuneNB
@@ -88,8 +90,8 @@ class PowerTune(Test):
 		debugcmds = ["debug seq freq {}", 
 					"debug seq direction {}", 
 					"debug seq testtype {}", 
-					"debug seq datarate 1", 
-					"debug seq cutpower 0", 
+					"debug seq datarate {}", 
+					"debug seq cutpower {}", 
 					"debug seq modemstart"]
 		for i,c in enumerate(debugcmds):
 			cmd = (c + appnd).format(param[i])
@@ -120,7 +122,8 @@ class PowerTune(Test):
 	def main(self):
 		unready = 1
 		self._ch.AsciiMode()
-		self.tunetables = ["","",""]
+		self._pm.ch1.freq(300000000)
+		self.tunetables = [[""],[""],[""]]
 		while(unready):
 			self._red.flush()
 			self._blk.flush()
@@ -159,7 +162,7 @@ class PowerTune(Test):
 			self.tunetables[1] = self._red.flush()
 			self._red.send("bit wide eng")
 			time.sleep(10)
-			self._blk.waitFor("#")
+			self._blk.send_and_wait("\n", '#')
 			self.configWBTEST()
 			while cutpwr < 20:
 				self._blk.send_and_flush("debug seq cutpower {}".format(cutpwr))
@@ -215,7 +218,6 @@ class PowerTune(Test):
 			#jadelta = 0.3 if target < 10 else 0.4*exp( -0.047*target)		# Exponential
 			tried = []
 			last = [tune, target - self._pm.powerStable()]
-			print('loop reached')
 			while True:
 				if(not fine and tune in tried):
 					jalim = 2*jalim
@@ -289,7 +291,7 @@ if __name__ == "__main__":
 		mm = splitResourceID(r.query('*idn?')[:-1])
 		print(mm)
 		adptr = VISAAdapter("TestAdapter", r)
-		ps =  PS(mm, adptr)
+		ps =  LambdaPS(mm, adptr)
 		#ps.output_state(0)
 		ps.voltage(26)
 		time.sleep(1)
@@ -303,8 +305,6 @@ if __name__ == "__main__":
 		#time.sleep(30)
 	except:
 		print("GPIB FAILURE")
-		exit(0)
-		print("Power Supply Error")
 	
 	try:
 		reduut = Console('RED', redcom)
@@ -315,7 +315,7 @@ if __name__ == "__main__":
 	try:
 		blkuut = Console('BLK', blkcom)
 	except:
-		reduut.close()
+		blkuut.close()
 		blkuut = Console('BLK', blkcom)
 	
 	try:

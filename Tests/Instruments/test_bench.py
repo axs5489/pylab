@@ -55,11 +55,11 @@ for addr in addr_list:
 				pass
 				adptr = VISAAdapter("TestAdapter", r)
 				instr =  AudioAnalyzer("AudioAn", adptr)
-				res[addr] = ["AudioAn", adptr, instr]
+				res[addr] = [["HP", "8903A"], adptr, instr]
 			if(addr is addr_modan):
 				adptr = VISAAdapter("TestAdapter", r)
 				instr =  ModulationAnalyzer("ModAn", adptr)
-				res[addr] = ["ModAn", adptr, instr]
+				res[addr] = [["HP", "8901A"], adptr, instr]
 			else:
 				mm = splitResourceID(r.query('*idn?')[:-1])
 				print(mm)
@@ -87,4 +87,7 @@ for k,v in res.items():
 		scp = res[k][2]
 	print(v[0])
 	for i in instruments:
-		print(i.checkSupport(v[0][1]))
+		spt = i.checkSupport(v[0][1])
+		if spt:
+			print(spt)
+			break
